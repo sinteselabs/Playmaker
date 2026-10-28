@@ -35,9 +35,10 @@ If no notification can reach you (Claude Code without monitors, a `-p` session, 
 **3. When something comes back,** run `board sync` (it folds finished workers into the board and prints what was delivered and what failed), then handle each delivery one at a time:
 
 1. Read the worker's report: `.playmaker/runs/<run>/<worker>/result.md`. A report is a claim, not proof.
-2. Look at the real change: `git diff --stat <base>...<branch>` and the diff of the files that matter. Check that the worker stayed inside its `owns`.
+2. Look at the real change: `git diff --stat <base>...<branch>` and the diff of the files that matter. Check that the worker stayed inside its `owns`. Unless the change is a few lines, ask the plugin's reviewer agent (`sintese-playmaker:reviewer`, through the Agent tool) to review it: give it the task id, the brief and report paths, the branch, the base and the task's `owns`. It returns a verdict (integrate, send back, ask the user), the done-when items met, and findings. Its verdict informs yours; the decision and the gates stay with you.
 3. If the change is wrong or out of scope, send it back: `board reject <task> --note "<what is wrong, specifically>"`. That counts as a failed round, and the note goes into the next worker's brief.
 4. Otherwise integrate: `board integrate <task>`. It rebases the branch on the current base, runs the gates itself in the worktree, fast-forwards the merge (never forced), sets the task to `to_test` and removes the worktree and branch. With `mergePolicy: ask`, show the user a short summary of the diff first and integrate only after they say yes (they can also run `/sintese-playmaker:merge <task>` themselves).
+   After a merge, the task's "how to test" comes from the "How to test" section of the worker's report. If the report had none, or it is wrong, write one from the diff and set it: `board howto <task> --file <file>`.
 5. If integrate fails (exit 3), the board has already counted the failed round and kept the output. The task goes to `rework` and the next `board start` sends a new worker back on top of the same branch with the failure in its brief. After two failed rounds the task is parked as `refix` with the problem recorded. Do not fix it yourself.
 6. A worker that failed, timed out or made no change is handled the same way by `board sync`.
 
@@ -51,7 +52,7 @@ Only when Lore tools are available (`mcp__lore__*` or `mcp__Lore__*`, possibly d
 
 1. **Before each `board start`: what each task should know.** `board recall` prints, for each task of the batch, the words to search with and a ready `query`. Run `memory_query` with it (`limit` 5) and open what looks relevant with `memory_read_page`: decisions, gotchas and rules about those files beat session notes. Write only what applies to that task, a few lines each with the page path, into a file, and attach it: `board context <task> --file <file>`. The next brief gets a "What this project already knows" section, so the worker benefits even when its CLI has no Lore. If nothing applies, attach nothing.
 2. **While the run lasts: the run's page.** After each `board start` and after each integration or failed round, `board page` prints the page as JSON (`path`, `expires_at`, `tier`, `tags`, `body`). Write it with `memory_write_page` using those fields as they are. It expires on its own a week later. Do it when the board changes, not on every notification.
-3. **When the loop stops: the retrospective and the scorecard.** `board retro` prints what happened per task, and `board scorecard` how each provider has done in this repository (the scorecard is kept in `.playmaker/scorecard.json` across runs). Write the retrospective at `playmaker/runs/<run>.md` with `tier: episodic` and the scorecard at `playmaker/scorecard.md`. In the final report, list each task that was parked or failed for the same reason more than once, and offer to record it as a gotcha page (`gotchas/<topic>.md`); write one only for the ones the user picks.
+3. **When the loop stops: the retrospective and the scorecard.** `board retro` prints what happened per task, and `board scorecard` how each provider has done in this repository (the scorecard is kept in `.playmaker/scorecard.json` across runs). Write the retrospective at `playmaker/runs/<run>.md` with `tier: episodic`, the scorecard at `playmaker/scorecard.md`, and what is left to test (`board totest`) at `playmaker/to-test.md`, so the list is one place the user can come back to. In the final report, list each task that was parked or failed for the same reason more than once, and offer to record it as a gotcha page (`gotchas/<topic>.md`); write one only for the ones the user picks.
 4. **If the session is ending while workers still run** (the user says they are stopping, or asks you to save where things are): `memory_handoff_begin` with the run id and each task's status in `summary`, and "run /sintese-playmaker:go to resume" in `next_steps`. Even without it, the next session in this repository is told the run is unfinished.
 
 ## Statuses
@@ -76,7 +77,7 @@ After a round, tell the user in a few lines what merged, what is running and wha
 When the loop stops, give the final report, and send a push notification too if a notification tool is available:
 
 - what shipped (task and commit),
-- what is at `To test`, and that `/sintese-playmaker:done <task>` marks one as tested,
+- what is at `To test`, with how to test each (`board totest`), and that `/sintese-playmaker:done <task>` marks one as tested,
 - decisions you took on the user's behalf,
 - to-dos for the user,
 - what failed or was parked, with the reason, and that `/sintese-playmaker:retry <task>` re-arms one,
