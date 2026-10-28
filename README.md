@@ -47,6 +47,48 @@ Every command is `/sintese-playmaker:<name>`.
 | `stop [task...]` | Stops running workers and cleans up their worktrees and branches. The board stays, so `go` picks up later. |
 | `doctor [--gates] [--smoke]` | Checks node, git, the board and every agent CLI. `--gates` runs your gates in a fresh worktree; `--smoke` proves each CLI is logged in. Also says whether Lore is connected. |
 
+And `/playmaker` shows or hides the live board.
+
+## The live board
+
+A pane beside the conversation that shows the run as it happens: what is
+running, with which CLI and for how long; what was delivered and waits for
+review; what comes next and why it waits; what was parked; what is at To test.
+Each row has the button that fits it (Merge, Retry, Done), and the footer has
+Go, Stop and Report.
+
+```
+Playmaker ──────────────────────────────────────────────
+2 of 6 merged · base main · up to 3 at once
+
+Running (1)
+● api    Codex CLI · 7 min
+Delivered, to review (1)
+◆ ui     by Gemini CLI                          [ Merge ]
+Next (1)
+○ docs   waiting for api to be merged
+Parked (1)
+✗ cache  gate failed: npm test                  [ Retry ]
+To test (1)
+✓ auth   merged abcdef1                         [ Done ]
+
+1 done
+
+s: Stop   r: Report
+```
+
+It opens by itself when a run starts (the **Live board** option turns that
+off), and `/playmaker` shows or hides it at any time. While it is closed, one
+line above the prompt sums up the run: `Playmaker: 1 running · 1 to review`.
+A toast tells you when a worker delivers.
+
+The pane only reads `.playmaker/`. Every button runs one of the commands above,
+exactly as if you had typed it, so the manager agent still does the review and
+is still the only one that changes the board. It is a Claude Code
+[mod](https://code.claude.com/docs/en/plugins/mods/overview), so it shows in the
+terminal, the desktop app and the VS Code extension, not on claude.ai or in
+Cowork.
+
 ## What it does
 
 **Notices.** A hook counts the open tasks in the session (`TaskCreate`,
@@ -122,11 +164,12 @@ parallel run on its own and hears about deliveries as they happen.
 
 Then run `/sintese-playmaker:doctor` once in your project.
 
-On install it asks two things (also under `/config`):
+On install it asks three things (also under `/config`):
 
 - **Proactive offers**: turns the automatic nudge on or off. With it off the
   commands still work on demand.
 - **Open tasks before nudging**: how many open tasks trigger the note (2 to 20).
+- **Live board**: whether the board pane opens by itself when a run starts.
 
 ### 2. claude.ai, the desktop app and Cowork
 
@@ -204,8 +247,9 @@ board and no integration (at most 6 workers).
 - **Everything lives in `.playmaker/`**, excluded from git through
   `.git/info/exclude`. No worktree or branch is left behind after a merge or a
   stop.
-- **The monitor only reads.** It never changes the board, so it cannot race a
-  merge. Outside a git repository it exits at once.
+- **The monitor and the live board only read.** Neither changes the board, so
+  neither can race a merge. The board's buttons run the same commands you can
+  type. Outside a git repository the monitor exits at once.
 - **Nothing is pushed** to a remote unless you ask.
 
 The command line of each CLI and its caveats are in
@@ -243,8 +287,13 @@ to the manager.
 - **A per-provider "unsafe" option** does not exist yet. The bypass flag is per
   task, in `extraArgs`.
 - **Codex.** The skills follow the Agent Skills format and install with
-  `npx playmakerlabs init`, but the hooks and the monitor are Claude Code only,
-  and the Codex side has not been tested end to end.
+  `npx playmakerlabs init`, but the hooks, the monitor and the live board are
+  Claude Code only, and the Codex side has not been tested end to end.
+- **The live board needs mods.** Mods load in Claude Code 2.1.287 or later, in
+  a workspace you trusted. They do not load with `--safe-mode`, `--bare` or
+  `disableAllHooks`, and an organization can turn them off in managed settings.
+  Without them, everything else works and `/sintese-playmaker:board` shows the
+  same state in the conversation.
 
 ## Tests
 
@@ -262,13 +311,19 @@ and the validation errors. The commands test covers the monitor (one line per
 delivery, never a write), `sync`, `reject`, `stop`, `retry`, a report without a
 board, and the doctor with its gates and smoke checks.
 
-Before a release, also run `claude plugin validate .`.
+```bash
+claude plugin test          # the live board pane, with no session (tests/panel.test.ts)
+claude plugin validate .    # the manifest and the hooks module, as Claude Code reads them
+```
+
+CI runs all of them on every change.
 
 ## Layout
 
 ```
 .claude-plugin/plugin.json          manifest and options
-hooks/hooks.json                    SessionStart and PostToolUse
+hooks/hooks.json                    SessionStart and PostToolUse, and the live board's module
+hooks/panel.js                      the live board: pane, line above the prompt, /playmaker
 monitors/monitors.json              the monitor that announces deliveries
 skills/plan/                        when to offer, how to offer, how to build the board
 skills/plan/references/             board, brief, providers, coordination and Lore
@@ -280,6 +335,7 @@ scripts/spawn.mjs                   worker supervisor and single-batch launcher
 scripts/status.mjs                  worker state and file overlap
 scripts/detect-agents.mjs           detects installed CLIs
 scripts/task-watch.mjs              counts open tasks and gives the nudge
+scripts/lib/model.mjs               board defaults, collisions and the ready set, shared with the pane
 scripts/lib/launch.mjs              worktree, brief and start of each worker
 scripts/lib/providers.mjs           how each CLI is started
 cli/playmaker.mjs                   the npm CLI: init and the scripts above

@@ -1,5 +1,4 @@
-# Every gate this repository has, on every change. `claude plugin validate .` is not
-# here: it needs Claude Code, so it stays a local gate, run before each release.
+# Every gate this repository has, on every change.
 name: checks
 
 on:
@@ -42,6 +41,20 @@ jobs:
           git config --global user.email "ci@example.invalid"
       - run: npm run test:e2e
 
+  plugin:
+    # Claude Code itself: the manifest and the hooks module as the loader reads them, and the
+    # live board pane's tests (tests/panel.test.ts), which need no session, sign-in or network.
+    name: plugin validate and the live board's tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: claude plugin validate .
+      - run: claude plugin test
+
   package:
     name: what the package would ship
     runs-on: ubuntu-latest
@@ -55,7 +68,7 @@ jobs:
           npm pack --dry-run --json > packed.json
           node -e '
             const files = JSON.parse(require("fs").readFileSync("packed.json", "utf8"))[0].files.map((f) => f.path);
-            const missing = ["cli/playmaker.mjs", ".claude-plugin/plugin.json", "hooks/hooks.json", "scripts/board.mjs", "scripts/lib/launch.mjs", "skills/plan/SKILL.md", "skills/go/SKILL.md", "skills/board/SKILL.md", "scripts/doctor.mjs", "monitors/monitors.json", "LICENSE"].filter((p) => !files.includes(p));
+            const missing = ["cli/playmaker.mjs", ".claude-plugin/plugin.json", "hooks/hooks.json", "scripts/board.mjs", "scripts/lib/launch.mjs", "skills/plan/SKILL.md", "skills/go/SKILL.md", "skills/board/SKILL.md", "scripts/doctor.mjs", "monitors/monitors.json", "hooks/panel.js", "scripts/lib/model.mjs", "LICENSE"].filter((p) => !files.includes(p));
             if (missing.length) { console.error("the package would not carry: " + missing.join(", ")); process.exit(1); }
             const tests = files.filter((p) => p.startsWith("tests/"));
             if (tests.length) { console.error("the package would carry the tests: " + tests.join(", ")); process.exit(1); }
