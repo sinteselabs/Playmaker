@@ -21,6 +21,9 @@
 //   board.mjs page                           the run's page for project memory, as JSON
 //   board.mjs retro [--json]                 what happened in the run, per task
 //   board.mjs scorecard [--json]             how each provider has done in this repository
+//   board.mjs import <plan.md> [--write] [--provider id]   a draft board from a Blueprint plan and its specs
+//   board.mjs howto <task> --file F          set how to test a task (integrate takes it from the report)
+//   board.mjs totest [--json]                everything at To test, with how to test each
 //
 // Board file: <repo>/.playmaker/board.json, format in skills/plan/references/board.md
 import fs from 'node:fs';
@@ -29,7 +32,8 @@ import { spawnSync } from 'node:child_process';
 import { makeWorker, removeWorktree, startWorker, checkFree, ID_RE } from './lib/launch.mjs';
 import { PROVIDER_IDS, PROVIDERS } from './lib/providers.mjs';
 import { STATUSES, computeReady, withDefaults } from './lib/model.mjs';
-import { recallTerms, retro, runPage, scoreEntry, scoreSummary } from './lib/report.mjs';
+import { howToTestFrom, recallTerms, retro, runPage, scoreEntry, scoreSummary, toTestList } from './lib/report.mjs';
+import { idFromSpec, parsePlan, specSituation } from './lib/blueprint.mjs';
 import { git, killTree, pidAlive, readJson, repoRoot, tryGit, writeJsonAtomic } from './lib/util.mjs';
 import { commandLine, stamp } from './spawn.mjs';
 
@@ -331,6 +335,13 @@ function cmdIntegrate() {
   t.merged = git(root, 'rev-parse', 'HEAD');
   t.history.push({ at: new Date().toISOString(), event: 'merged', commit: t.merged });
   recordScore(b, t, 'merged');
+  if (!t.howToTest) {
+    try {
+      t.howToTest = howToTestFrom(fs.readFileSync(path.join(root, '.playmaker', 'runs', b.run, t.worker, 'result.md'), 'utf8')) || undefined;
+    } catch {
+      // no report: the manager can still set it with `board howto`
+    }
+  }
   removeWorktree(root, t.worktree);
   for (const br of t.branches) tryGit(root, 'branch', '-D', br);
   save(b);
@@ -498,6 +509,79 @@ function cmdScorecard() {
   console.log(entries.length ? s.markdown : 'No finished task yet in this repository: the scorecard fills as tasks merge or get parked.');
 }
 
+function cmdImport() {
+  const planArg = positional[0];
+  if (!planArg) die('usage: import <plan.md> [--write] [--provider id]');
+  const planFile = path.resolve(planArg);
+  if (!fs.existsSync(planFile)) die(`no plan at ${planFile}.`);
+  const provider = flagValue('--provider') || 'claude';
+  if (!PROVIDER_IDS.includes(provider)) die(`unknown provider "${provider}". Known: ${PROVIDER_IDS.join(', ')}.`);
+  const items = parsePlan(fs.readFileSync(planFile, 'utf8'));
+  if (!items.length) die('found no task in the plan: a task is a numbered line that names its spec in backticks, such as `specs/01-01-name.md`.');
+
+  const rel = (abs) => path.relative(root, abs).split(path.sep).join('/');
+  const phases = [...new Set(items.map((it) => it.phase))];
+  const ids = new Set();
+  const tasks = items.map((it) => {
+    const specFile = path.resolve(path.dirname(planFile), it.spec);
+    if (!fs.existsSync(specFile)) die(`the plan names ${it.spec}, which does not exist at ${specFile}.`);
+    const spec = rel(specFile);
+    const text = fs.readFileSync(specFile, 'utf8').trim();
+    let id = idFromSpec(spec);
+    for (let n = 2; ids.has(id); n += 1) id = `${idFromSpec(spec).slice(0, 28)}-${n}`;
+    ids.add(id);
+    return {
+      id,
+      title: it.title,
+      phase: it.phase,
+      provider,
+      spec,
+      situation: specSituation(text),
+      owns: [spec],
+      brief: `${text}\n\n## When you deliver\nThis task comes from the project's plan, and the spec above is \`${spec}\`. When you finish, fill in that file the sections it leaves for the delivery (what was delivered, and how to test it), and keep the rest of it as it is.\n`,
+    };
+  });
+  for (const task of tasks) {
+    const before = phases.indexOf(task.phase) - 1;
+    task.deps = before >= 0 ? tasks.filter((x) => x.phase === phases[before]).map((x) => x.id) : [];
+  }
+  const board = {
+    base: tryGit(root, 'branch', '--show-current') || 'main',
+    cap: 4,
+    gates: [],
+    sharedFiles: [],
+    source: { plan: rel(planFile) },
+    tasks,
+  };
+  process.stderr.write(
+    `${tasks.length} task(s) in ${phases.length} phase(s) from ${rel(planFile)}. Each phase depends on the one before.\n` +
+      'Before the board is valid, add to each task the code it will edit (owns: files or folders), check the providers, add the gates, and drop tasks whose situation says they are finished.\n'
+  );
+  if (!flag('--write')) return console.log(JSON.stringify(board, null, 2));
+  if (fs.existsSync(boardFile)) die(`a board already exists at ${boardFile}. Finish or move it first, or run import without --write.`, 2);
+  save(board);
+  console.log(`Draft board written to ${boardFile}.`);
+}
+
+function cmdHowto() {
+  const id = positional[0];
+  const file = flagValue('--file');
+  if (!id || !file) die('usage: howto <task> --file how-to-test.md');
+  const b = load();
+  const t = b.tasks.find((x) => x.id === id);
+  if (!t) die(`no task "${id}".`);
+  const text = fs.readFileSync(path.resolve(file), 'utf8').trim();
+  if (!text) die(`${file} is empty.`);
+  t.howToTest = text;
+  save(b);
+  console.log(`${id}: how to test set`);
+}
+
+function cmdToTest() {
+  const list = toTestList(load());
+  console.log(flag('--json') ? JSON.stringify(list, null, 2) : list.markdown);
+}
+
 function cmdSet() {
   const [id, status] = positional;
   if (!id || !status) die('usage: set <task> <status> [--note text] [--confirmed-by-user]');
@@ -571,9 +655,12 @@ const commands = {
   page: cmdPage,
   retro: cmdRetro,
   scorecard: cmdScorecard,
+  import: cmdImport,
+  howto: cmdHowto,
+  totest: cmdToTest,
 };
 if (!commands[cmd]) {
-  console.log('usage: board.mjs validate | show | ready | start | wait | integrate <task> | set <task> <status> | report | sync | watch | stop [task...] | retry <task> | reject <task> --note T | recall [task...] | context <task> --file F | page | retro | scorecard');
+  console.log('usage: board.mjs validate | show | ready | start | wait | integrate <task> | set <task> <status> | report | sync | watch | stop [task...] | retry <task> | reject <task> --note T | recall [task...] | context <task> --file F | page | retro | scorecard | import <plan.md> | howto <task> --file F | totest');
   process.exit(cmd ? 1 : 0);
 }
 await commands[cmd]();

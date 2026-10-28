@@ -92,6 +92,40 @@ export function retro(b) {
   return { summary, tasks, markdown: lines.join('\n') };
 }
 
+/**
+ * The "How to test" section of a worker's report: from that heading (any level, or bold) to the next
+ * heading, at most 1500 characters. Null when the report has none.
+ */
+export function howToTestFrom(report) {
+  const lines = String(report || '').split(/\r?\n/);
+  const start = lines.findIndex((l) => /^\s*(#{1,6}\s*|\*\*)?how to test\b/i.test(l));
+  if (start < 0) return null;
+  const inline = lines[start].replace(/^\s*(#{1,6}\s*|\*\*)?how to test\b[*:\s]*/i, '').trim();
+  const rest = [];
+  for (const l of lines.slice(start + 1)) {
+    if (/^\s*#{1,6}\s/.test(l) || /^\s*\*\*[^*]+\*\*\s*:?\s*$/.test(l)) break;
+    rest.push(l);
+  }
+  const text = [inline, ...rest].join('\n').trim();
+  return text ? text.slice(0, 1500) : null;
+}
+
+/** Everything waiting for the user to test: one section per task at To test, with how to test it. */
+export function toTestList(b) {
+  const tasks = b.tasks
+    .filter((t) => t.status === 'to_test')
+    .map((t) => ({ id: t.id, title: t.title || null, commit: t.merged || null, spec: t.spec || null, howToTest: t.howToTest || null }));
+  const lines = ['# To test', ''];
+  if (!tasks.length) lines.push('Nothing is waiting to be tested.');
+  for (const t of tasks) {
+    lines.push(`## ${t.id}${t.title ? ` · ${t.title}` : ''}${t.commit ? ` (commit ${t.commit.slice(0, 8)})` : ''}`, '');
+    lines.push(t.howToTest || 'The delivery said nothing about how to test it: ask the manager to find out from the change.');
+    if (t.spec) lines.push('', `Spec: \`${t.spec}\``);
+    lines.push('');
+  }
+  return { tasks, markdown: lines.join('\n').trim() };
+}
+
 /** The scorecard entry for a task that just merged or was parked. */
 export function scoreEntry(b, t, outcome, atIso) {
   return {
