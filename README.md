@@ -250,6 +250,7 @@ scripts/lib/launch.mjs              worktree, brief and start of each worker
 scripts/lib/providers.mjs           how each CLI is started
 cli/playmaker.mjs                   the npm CLI: init and the scripts above
 tests/                              end-to-end and CLI tests
+tooling/make_icon.py                draws .claude-plugin/icon.png (not part of the product)
 ```
 
 ## License

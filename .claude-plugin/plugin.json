@@ -1,7 +1,7 @@
 {
   "name": "playmaker",
   "displayName": "Playmaker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Notices when there is enough parallelizable work, offers to run it with the agent CLIs you already have installed (Claude Code, Codex, Gemini/Antigravity, Copilot), and coordinates the workers through git worktrees and Lore.",
   "author": {
     "name": "Síntese Labs"
@@ -9,6 +9,7 @@
   "homepage": "https://github.com/sinteselabs/Playmaker",
   "repository": "https://github.com/sinteselabs/Playmaker",
   "license": "MIT",
+  "icon": ".claude-plugin/icon.png",
   "keywords": ["multi-agent", "orchestration", "parallel", "worktree", "lore"],
   "userConfig": {
     "proactive": {
