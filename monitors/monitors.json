@@ -1,0 +1,7 @@
+[
+  {
+    "name": "playmaker-watch",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/board.mjs\" watch",
+    "description": "Playmaker workers delivering or failing"
+  }
+]

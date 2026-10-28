@@ -32,21 +32,26 @@ assert.deepEqual(fs.readdirSync(tmp), [], 'dry run wrote nothing');
 // init writes the skills where each agent reads them ------------------------
 const first = cli(['init'], tmp);
 assert.equal(first.status, 0, first.stderr);
+const SKILLS = fs.readdirSync(path.join(ROOT, 'skills')).sort();
+assert.deepEqual(SKILLS, ['board', 'doctor', 'done', 'go', 'merge', 'park', 'plan', 'retry', 'stop']);
 for (const dir of ['.claude/skills', '.agents/skills']) {
-  for (const skill of ['orchestrate', 'run']) {
+  for (const skill of SKILLS) {
     const file = path.join(tmp, dir, `playmaker-${skill}`, 'SKILL.md');
     const text = fs.readFileSync(file, 'utf8');
     assert.match(text, new RegExp(`^name: playmaker-${skill}$`, 'm'), `${file} is renamed`);
     assert.doesNotMatch(text, /CLAUDE_PLUGIN_ROOT/, `${file} does not depend on the plugin`);
-    assert.doesNotMatch(text, /playmaker:(orchestrate|run)|sintese-playmaker/, `${file} names the copied skills`);
+    assert.doesNotMatch(text, /sintese-playmaker|playmaker:/, `${file} names the copied skills`);
   }
 }
-const runSkill = fs.readFileSync(path.join(tmp, '.claude/skills/playmaker-run/SKILL.md'), 'utf8');
-assert.ok(runSkill.includes(`npx -y playmakerlabs@${version} board`), 'board goes through the pinned CLI');
-assert.ok(fs.existsSync(path.join(tmp, '.agents/skills/playmaker-orchestrate/references/board.md')), 'references are copied');
+const goSkill = fs.readFileSync(path.join(tmp, '.claude/skills/playmaker-go/SKILL.md'), 'utf8');
+assert.ok(goSkill.includes(`npx -y playmakerlabs@${version} board`), 'board goes through the pinned CLI');
+assert.ok(goSkill.includes('`playmaker-merge`'), 'commands named by their copied names');
+const doctorSkill = fs.readFileSync(path.join(tmp, '.agents/skills/playmaker-doctor/SKILL.md'), 'utf8');
+assert.ok(doctorSkill.includes(`npx -y playmakerlabs@${version} doctor`), 'doctor goes through the pinned CLI');
+assert.ok(fs.existsSync(path.join(tmp, '.agents/skills/playmaker-plan/references/board.md')), 'references are copied');
 
 // a second init keeps every file, and never overwrites one -------------------
-const mine = path.join(tmp, '.claude/skills/playmaker-run/SKILL.md');
+const mine = path.join(tmp, '.claude/skills/playmaker-go/SKILL.md');
 fs.writeFileSync(mine, 'edited by the user\n');
 const second = cli(['init'], tmp);
 assert.equal(second.status, 0, second.stderr);

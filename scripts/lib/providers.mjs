@@ -1,5 +1,5 @@
 // Headless invocation of each agent CLI. Flags checked against each vendor's docs on 2026-10-26;
-// see skills/orchestrate/references/providers.md for sources and caveats.
+// see skills/plan/references/providers.md for sources and caveats.
 //
 // Safety stance: every provider runs in its "edit files, ask before anything riskier" mode.
 // No provider is ever started with a bypass/yolo flag. A plan can add flags through `extraArgs`,

@@ -25,13 +25,13 @@ jobs:
       - run: npm test
 
   e2e:
-    # The fake agent CLIs in these tests are shell scripts, so they run on macOS and Linux only.
-    name: board and launcher on ${{ matrix.os }}
+    # The whole loop with fake agent CLIs (tests/lib/fakes.mjs): board, launcher, commands, monitor, doctor.
+    name: board, launcher and commands on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -55,7 +55,7 @@ jobs:
           npm pack --dry-run --json > packed.json
           node -e '
             const files = JSON.parse(require("fs").readFileSync("packed.json", "utf8"))[0].files.map((f) => f.path);
-            const missing = ["cli/playmaker.mjs", ".claude-plugin/plugin.json", "hooks/hooks.json", "scripts/board.mjs", "scripts/lib/launch.mjs", "skills/orchestrate/SKILL.md", "skills/run/SKILL.md", "LICENSE"].filter((p) => !files.includes(p));
+            const missing = ["cli/playmaker.mjs", ".claude-plugin/plugin.json", "hooks/hooks.json", "scripts/board.mjs", "scripts/lib/launch.mjs", "skills/plan/SKILL.md", "skills/go/SKILL.md", "skills/board/SKILL.md", "scripts/doctor.mjs", "monitors/monitors.json", "LICENSE"].filter((p) => !files.includes(p));
             if (missing.length) { console.error("the package would not carry: " + missing.join(", ")); process.exit(1); }
             const tests = files.filter((p) => p.startsWith("tests/"));
             if (tests.length) { console.error("the package would carry the tests: " + tests.join(", ")); process.exit(1); }
