@@ -38,7 +38,7 @@ for (const dir of ['.claude/skills', '.agents/skills']) {
     const text = fs.readFileSync(file, 'utf8');
     assert.match(text, new RegExp(`^name: playmaker-${skill}$`, 'm'), `${file} is renamed`);
     assert.doesNotMatch(text, /CLAUDE_PLUGIN_ROOT/, `${file} does not depend on the plugin`);
-    assert.doesNotMatch(text, /playmaker:(orchestrate|run)/, `${file} names the copied skills`);
+    assert.doesNotMatch(text, /playmaker:(orchestrate|run)|sintese-playmaker/, `${file} names the copied skills`);
   }
 }
 const runSkill = fs.readFileSync(path.join(tmp, '.claude/skills/playmaker-run/SKILL.md'), 'utf8');

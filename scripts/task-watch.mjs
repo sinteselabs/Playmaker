@@ -33,7 +33,7 @@ try {
     output = hookOutput(
       'PostToolUse',
       `Playmaker note: ${state.open} open tasks are tracked in this session. ` +
-        'The playmaker:orchestrate skill covers when running them in parallel fits and how to offer that to the user, once, with approval before anything launches.'
+        'The sintese-playmaker:orchestrate skill covers when running them in parallel fits and how to offer that to the user, once, with approval before anything launches.'
     );
   }
 

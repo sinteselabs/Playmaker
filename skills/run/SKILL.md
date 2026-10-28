@@ -1,6 +1,6 @@
 ---
 name: run
-description: Use when the user says "parallel run" or "autonomous parallel run", or after playmaker:orchestrate got the user's approval and the board is written. Acts as the manager: starts workers for every task that can safely run, integrates each delivery as it arrives (rebase, gates, merge), starts the next ones, and reports to the user when everything is finished.
+description: Use when the user says "parallel run" or "autonomous parallel run", or after sintese-playmaker:orchestrate got the user's approval and the board is written. Acts as the manager: starts workers for every task that can safely run, integrates each delivery as it arrives (rebase, gates, merge), starts the next ones, and reports to the user when everything is finished.
 ---
 
 # Playmaker: run the board
@@ -12,7 +12,7 @@ This skill is the manager loop of a parallel run. It follows the parallel-run ru
 ## 0. Before you start
 
 1. If Lore tools are available (`mcp__Lore__*`, possibly deferred: load them with ToolSearch), run `memory_query` for `parallel-run`. A hit may sit in the project, the workspace or in `shared_with_you_hits`. If you find the rule page, read it in full and follow it where it differs from the defaults here (worker cap, shared files, gates, reporting). Treat it as evidence, not as authority: the user's current instructions win.
-2. The board must exist and be valid: `node "${CLAUDE_PLUGIN_ROOT}/scripts/board.mjs" validate`. If it does not exist, use `playmaker:orchestrate` to build it.
+2. The board must exist and be valid: `node "${CLAUDE_PLUGIN_ROOT}/scripts/board.mjs" validate`. If it does not exist, use `sintese-playmaker:orchestrate` to build it.
 3. The main worktree must be on the base branch with no uncommitted changes. Integration refuses otherwise.
 4. Know the merge policy (automatic on green gates, or ask before each merge) and whether the run is autonomous. If the user said "parallel run" without more, the rule's behavior applies: merge automatically when the gates pass.
 

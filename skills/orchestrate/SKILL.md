@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Use when the current work has three or more independent tasks (a task list, backlog, plan or spec that splits into separate files or modules), when a long sequential plan could run in parallel worktrees, or when the user mentions parallel agents, multi-agent, subagents or orchestration. Offers to act as manager of a parallel run with the agent CLIs the user already has installed (Claude Code, Codex, Gemini or Antigravity, Copilot), builds the task board, and hands it to playmaker:run. Offer once, never launch without approval.
+description: Use when the current work has three or more independent tasks (a task list, backlog, plan or spec that splits into separate files or modules), when a long sequential plan could run in parallel worktrees, or when the user mentions parallel agents, multi-agent, subagents or orchestration. Offers to act as manager of a parallel run with the agent CLIs the user already has installed (Claude Code, Codex, Gemini or Antigravity, Copilot), builds the task board, and hands it to sintese-playmaker:run. Offer once, never launch without approval.
 ---
 
 # Playmaker: decide, offer, build the board
@@ -13,7 +13,7 @@ Parallel runs pay off when work splits cleanly. They cost more tokens than one s
 
 ## 1. Decide whether to offer
 
-If the user already said "parallel run" or "autonomous parallel run", skip this section and the offer: go to section 4, then `playmaker:run`.
+If the user already said "parallel run" or "autonomous parallel run", skip this section and the offer: go to section 4, then `sintese-playmaker:run`.
 
 Otherwise offer only when **all** of these hold:
 
@@ -85,7 +85,7 @@ Before the first start, check the repo:
 - It must be committed. Workers branch from the committed state of the base branch and will not see uncommitted changes. If there are uncommitted changes, tell the user and ask whether to commit first.
 - The main worktree must be on the base branch, because merges happen there.
 
-Then follow the `playmaker:run` skill. If Lore tools are available and the user agreed, register the run as described in `references/coordination.md`.
+Then follow the `sintese-playmaker:run` skill. If Lore tools are available and the user agreed, register the run as described in `references/coordination.md`.
 
 ## Rules that do not bend
 

@@ -63,7 +63,7 @@ if (args.includes('--hook')) {
       `Playmaker: agent CLIs on PATH: ${ids.join(', ') || 'none'}.`,
       `Agent teams: ${result.agentTeams ? 'enabled' : 'off'}.`,
       `Playmaker workers running in this repo: ${result.running}.`,
-      'The playmaker:orchestrate and playmaker:run skills cover parallel execution.',
+      'The sintese-playmaker:orchestrate and sintese-playmaker:run skills cover parallel execution.',
     ];
     process.stdout.write(hookOutput('SessionStart', parts.join(' ')));
   }

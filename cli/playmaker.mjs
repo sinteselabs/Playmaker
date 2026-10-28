@@ -42,7 +42,7 @@ export function forProject(text) {
   const command = Object.fromEntries(Object.entries(SCRIPTS).map(([cmd, file]) => [file, cmd]));
   return text
     .replace(/^name: (orchestrate|run)(?=\r?$)/m, 'name: playmaker-$1')
-    .replace(/playmaker:(orchestrate|run)\b/g, 'playmaker-$1')
+    .replace(/sintese-playmaker:(orchestrate|run)\b/g, 'playmaker-$1')
     .replace(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z-]+\.mjs)"/g, (match, file) => (command[file] ? `${cli} ${command[file]}` : match));
 }
 

@@ -95,18 +95,18 @@ Requires Node 22 or newer and git.
 
 ```bash
 claude plugin marketplace add sinteselabs/Playmaker
-claude plugin install playmaker@sinteselabs-playmaker
+claude plugin install sintese-playmaker@sinteselabs-playmaker
 ```
 
 From inside a session: `/plugin marketplace add sinteselabs/Playmaker`, then
-`/plugin install playmaker@sinteselabs-playmaker`. This is the only way that
+`/plugin install sintese-playmaker@sinteselabs-playmaker`. This is the only way that
 brings the hooks, so it is the only way the agent offers a parallel run on its
 own.
 
 On install it asks two things (also under `/config`):
 
 - **Proactive offers**: turns the automatic nudge on or off. With it off the
-  skills still work on demand (`/playmaker:orchestrate`, `/playmaker:run`).
+  skills still work on demand (`/sintese-playmaker:orchestrate`, `/sintese-playmaker:run`).
 - **Open tasks before nudging**: how many open tasks trigger the note (2 to 20).
 
 ### 2. claude.ai, the desktop app and Cowork

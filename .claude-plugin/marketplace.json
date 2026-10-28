@@ -6,7 +6,7 @@
   },
   "plugins": [
     {
-      "name": "playmaker",
+      "name": "sintese-playmaker",
       "source": "./",
       "description": "Offers to run parallel work with the agent CLIs you already have installed, and coordinates the workers through git worktrees and Lore."
     }
