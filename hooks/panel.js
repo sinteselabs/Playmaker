@@ -79,7 +79,11 @@ export function layout(v) {
     },
     {
       title: 'Delivered, to review',
-      rows: having('delivered').map((t) => ({ id: t.id, glyph: '◆', color: 'magenta', detail: `by ${label(t)}`, action: { label: 'Merge', skill: 'merge' } })),
+      rows: having('delivered').map((t) => ({ id: t.id, glyph: '◆', color: 'magenta', detail: `by ${label(t)}`, action: { label: board.integration === 'pr' ? 'Open PR' : 'Merge', skill: 'merge' } })),
+    },
+    {
+      title: 'In review',
+      rows: having('in_review').map((t) => ({ id: t.id, glyph: '⇄', color: 'cyan', detail: t.pr?.url ? `pull request ${t.pr.url.split('/').pop()} · ${t.pr.url}` : 'pull request open' })),
     },
     {
       title: 'Next',
@@ -129,8 +133,14 @@ export function bandText(v) {
   const count = (s) => v.board.tasks.filter((t) => t.status === s).length;
   const running = count('in_progress');
   const review = count('delivered');
-  if (!running && !review) return null;
-  const parts = [running ? `${running} running` : '', review ? `${review} to review` : '', count('to_test') ? `${count('to_test')} to test` : ''].filter(Boolean);
+  const prs = count('in_review');
+  if (!running && !review && !prs) return null;
+  const parts = [
+    running ? `${running} running` : '',
+    review ? `${review} to review` : '',
+    prs ? `${prs} in review on GitHub` : '',
+    count('to_test') ? `${count('to_test')} to test` : '',
+  ].filter(Boolean);
   return `Playmaker: ${parts.join(' · ')}  (/playmaker shows the board)`;
 }
 
