@@ -18,6 +18,7 @@ const BOARD = {
     { id: 'docs', provider: 'claude', status: 'not_started', deps: ['api'], owns: ['docs/'] },
     { id: 'cache', provider: 'claude', status: 'refix', feedback: 'gate failed: npm test\nmore', owns: ['src/cache/'] },
     { id: 'auth', provider: 'claude', status: 'to_test', merged: 'abcdef1234', owns: ['src/auth/'] },
+    { id: 'login', provider: 'claude', status: 'to_test', merged: '1234567890', howToTest: 'npm run dev, open /login\nsee the form', owns: ['src/login/'] },
     { id: 'old', provider: 'claude', status: 'done', owns: ['old/'] },
   ],
 }
@@ -91,13 +92,14 @@ test('the pane shows each task where it stands, with the action that fits', asyn
   await start($)
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect(await ui.find({ type: 'Text', text: '2 of 6 merged · base main · up to 3 at once' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '3 of 7 merged · base main · up to 3 at once' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'Running (1)' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'Codex CLI · 7 min' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'Delivered, to review (1)' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'waiting for api to be merged' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'gate failed: npm test' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'merged abcdef1' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'test: npm run dev, open /login' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '1 done' })).toBeDefined()
     expect(await ui.find({ key: 'stop' })).toBeDefined()
     expect(await ui.find({ key: 'go' })).toBeUndefined()
@@ -121,7 +123,7 @@ test('with the pane closed, one line above the prompt sums up the run', async ($
   world(on, { '.playmaker/board.json': BOARD })
   await start($)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await band.find({ type: 'Text', text: /^Playmaker: 1 running · 1 to review · 1 to test/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^Playmaker: 1 running · 1 to review · 2 to test/ })).toBeDefined()
 })
 
 test('a run that starts opens the pane once, and a delivery shows a toast', async ($, on) => {
