@@ -19,7 +19,7 @@ export function ensureExcluded(root) {
   }
 }
 
-export function workerFooter(w, gates = []) {
+export function workerFooter(w, gates = [], lore = false) {
   const lines = [
     '',
     '---',
@@ -33,6 +33,11 @@ export function workerFooter(w, gates = []) {
   if (gates.length) {
     lines.push('- Gates you must run and pass before reporting:');
     for (const g of gates) lines.push(`    ${g}`);
+  }
+  if (lore) {
+    lines.push(
+      `- If you have Lore memory tools (mcp__lore__*), declare your work at the start with a page at playmaker/${w.run}/${w.id}.md (what you are doing, which files), and close it at the end with what you built. If you do not have them, skip this: your report is enough.`
+    );
   }
   lines.push(
     '- Finish with a report that states: what you built, the commit hash, each gate you ran with a summary of its real output, anything you could not do or did not verify, and any decision you took that the user would normally take.',
@@ -85,13 +90,13 @@ export function checkFree(root, w) {
 }
 
 /** Create the worktree and branch, write the brief, start the detached supervisor. */
-export function startWorker(root, w, { gates = [] } = {}) {
+export function startWorker(root, w, { gates = [], lore = false } = {}) {
   checkFree(root, w);
   ensureExcluded(root);
   fs.mkdirSync(path.dirname(w.worktree), { recursive: true });
   git(root, 'worktree', 'add', '-b', w.branch, w.worktree, w.baseSha);
   fs.mkdirSync(path.join(w.worktree, '.playmaker'), { recursive: true });
-  const brief = w.brief.trimEnd() + '\n' + workerFooter(w, gates);
+  const brief = w.brief.trimEnd() + '\n' + workerFooter(w, gates, lore);
   fs.writeFileSync(path.join(w.worktree, '.playmaker', 'brief.md'), brief);
 
   fs.mkdirSync(w.workerDir, { recursive: true });

@@ -16,6 +16,11 @@
 //   board.mjs stop [task...]                 stop running workers, remove their worktrees and branches
 //   board.mjs retry <task> [--note T]        re-arm a parked or failed task, with a fresh attempt count
 //   board.mjs reject <task> --note T         send a delivered task back for rework, with the reason
+//   board.mjs recall [task...]               words to search project memory with, per task (default: the batch)
+//   board.mjs context <task> --file F        what the project already knows, added to the task's next brief
+//   board.mjs page                           the run's page for project memory, as JSON
+//   board.mjs retro [--json]                 what happened in the run, per task
+//   board.mjs scorecard [--json]             how each provider has done in this repository
 //
 // Board file: <repo>/.playmaker/board.json, format in skills/plan/references/board.md
 import fs from 'node:fs';
@@ -24,6 +29,7 @@ import { spawnSync } from 'node:child_process';
 import { makeWorker, removeWorktree, startWorker, checkFree, ID_RE } from './lib/launch.mjs';
 import { PROVIDER_IDS, PROVIDERS } from './lib/providers.mjs';
 import { STATUSES, computeReady, withDefaults } from './lib/model.mjs';
+import { recallTerms, retro, runPage, scoreEntry, scoreSummary } from './lib/report.mjs';
 import { git, killTree, pidAlive, readJson, repoRoot, tryGit, writeJsonAtomic } from './lib/util.mjs';
 import { commandLine, stamp } from './spawn.mjs';
 
@@ -37,7 +43,7 @@ const flagValue = (name) => {
   const i = rest.indexOf(name);
   return i >= 0 ? rest[i + 1] : undefined;
 };
-const positional = rest.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--note', '--timeout-min'].includes(rest[i - 1])));
+const positional = rest.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--note', '--timeout-min', '--file'].includes(rest[i - 1])));
 
 function die(message, code = 1) {
   process.stderr.write(`playmaker: ${message}\n`);
@@ -55,6 +61,8 @@ if (!root) {
   die('run this from the main worktree of a git repository.');
 }
 const boardFile = path.join(root, '.playmaker', 'board.json');
+// Outlives every run: one entry per task that merged or was parked, for the provider scorecard.
+const scoreFile = path.join(root, '.playmaker', 'scorecard.json');
 
 // ---------------------------------------------------------------- model
 
@@ -106,11 +114,18 @@ function validate(b) {
   return problems;
 }
 
-function failTask(t, reason) {
+function recordScore(b, t, outcome) {
+  const scores = readJson(scoreFile, { entries: {} });
+  scores.entries[`${b.run}/${t.id}`] = scoreEntry(b, t, outcome, new Date().toISOString());
+  writeJsonAtomic(scoreFile, scores);
+}
+
+function failTask(b, t, reason) {
   t.attempts += 1;
   t.feedback = reason;
   t.status = t.attempts >= MAX_ATTEMPTS ? 'refix' : 'rework';
   t.history.push({ at: new Date().toISOString(), event: 'failed', status: t.status, reason: reason.slice(0, 500) });
+  if (t.status === 'refix') recordScore(b, t, 'parked');
 }
 
 /** Fold worker outcomes into the board. Returns what changed. */
@@ -136,7 +151,7 @@ function sync(b) {
         state === 'done'
           ? 'the worker finished without committing any change'
           : `worker ${t.worker} ended as "${state}"${st.error ? `: ${st.error}` : ''}${st.commitError ? ` (commit error: ${st.commitError})` : ''}`;
-      failTask(t, `${why}. See ${path.join(dir, 'log.txt')}`);
+      failTask(b, t, `${why}. See ${path.join(dir, 'log.txt')}`);
       out.failed.push({ id: t.id, reason: t.feedback, status: t.status });
     }
   }
@@ -197,6 +212,7 @@ function cmdStart() {
     const retry = round > 1 && t.feedback;
     const brief =
       t.brief +
+      (t.context ? `\n\n## What this project already knows\nFrom the project's memory, picked for this task. Follow it where it applies.\n\n${t.context.trim()}\n` : '') +
       (retry
         ? `\n\n## Previous attempt failed integration\n${t.feedback}\n\nYour branch already contains the commits of that attempt. Fix what is described above, keep the rest. If the failure was a rebase conflict, run "git rebase ${b.base}" in your worktree and resolve it.\n`
         : '');
@@ -230,7 +246,7 @@ function cmdStart() {
   }
   b.run = run;
   for (const { t, w, round } of plans) {
-    startWorker(root, w, { gates: b.gates });
+    startWorker(root, w, { gates: b.gates, lore: b.lore === true });
     t.status = 'in_progress';
     t.worker = w.id;
     t.round = round;
@@ -281,7 +297,7 @@ function cmdIntegrate() {
   if (git(root, 'status', '--porcelain')) die('the main worktree has uncommitted changes. Commit or stash them first.', 2);
 
   const fail = (stage, detail) => {
-    failTask(t, `${stage}\n${tail(detail)}`);
+    failTask(b, t, `${stage}\n${tail(detail)}`);
     save(b);
     console.log(JSON.stringify({ task: id, ok: false, stage, status: t.status, attempts: t.attempts, detail: tail(detail, 2000) }, null, 2));
     process.exit(3);
@@ -314,6 +330,7 @@ function cmdIntegrate() {
   t.status = 'to_test';
   t.merged = git(root, 'rev-parse', 'HEAD');
   t.history.push({ at: new Date().toISOString(), event: 'merged', commit: t.merged });
+  recordScore(b, t, 'merged');
   removeWorktree(root, t.worktree);
   for (const br of t.branches) tryGit(root, 'branch', '-D', br);
   save(b);
@@ -436,9 +453,49 @@ function cmdReject() {
   const t = b.tasks.find((x) => x.id === id);
   if (!t) die(`no task "${id}".`);
   if (t.status !== 'delivered') die(`task "${id}" is "${t.status}", not "delivered".`, 2);
-  failTask(t, `Rejected in review: ${note}`);
+  failTask(b, t, `Rejected in review: ${note}`);
   save(b);
   console.log(`${id} -> ${t.status}`);
+}
+
+function cmdRecall() {
+  const b = load();
+  const ids = positional.length ? positional : computeReady(b).batch;
+  for (const id of ids) if (!b.tasks.some((t) => t.id === id)) die(`no task "${id}".`);
+  console.log(JSON.stringify(ids.map((id) => recallTerms(b.tasks.find((t) => t.id === id))), null, 2));
+}
+
+function cmdContext() {
+  const id = positional[0];
+  const file = flagValue('--file');
+  if (!id || (!file && !flag('--clear'))) die('usage: context <task> --file notes.md | --clear');
+  const b = load();
+  const t = b.tasks.find((x) => x.id === id);
+  if (!t) die(`no task "${id}".`);
+  if (flag('--clear')) delete t.context;
+  else {
+    const text = fs.readFileSync(path.resolve(file), 'utf8').trim();
+    if (!text) die(`${file} is empty.`);
+    t.context = text;
+  }
+  save(b);
+  console.log(`${id}: ${t.context ? `${t.context.length} characters of context, added to its next brief` : 'context cleared'}`);
+}
+
+function cmdPage() {
+  console.log(JSON.stringify(runPage(load(), Date.now()), null, 2));
+}
+
+function cmdRetro() {
+  const r = retro(load());
+  console.log(flag('--json') ? JSON.stringify(r, null, 2) : r.markdown);
+}
+
+function cmdScorecard() {
+  const entries = Object.values(readJson(scoreFile, { entries: {} }).entries);
+  const s = scoreSummary(entries);
+  if (flag('--json')) return console.log(JSON.stringify(s, null, 2));
+  console.log(entries.length ? s.markdown : 'No finished task yet in this repository: the scorecard fills as tasks merge or get parked.');
 }
 
 function cmdSet() {
@@ -509,9 +566,14 @@ const commands = {
   stop: cmdStop,
   retry: cmdRetry,
   reject: cmdReject,
+  recall: cmdRecall,
+  context: cmdContext,
+  page: cmdPage,
+  retro: cmdRetro,
+  scorecard: cmdScorecard,
 };
 if (!commands[cmd]) {
-  console.log('usage: board.mjs validate | show | ready | start | wait | integrate <task> | set <task> <status> | report | sync | watch | stop [task...] | retry <task> | reject <task> --note T');
+  console.log('usage: board.mjs validate | show | ready | start | wait | integrate <task> | set <task> <status> | report | sync | watch | stop [task...] | retry <task> | reject <task> --note T | recall [task...] | context <task> --file F | page | retro | scorecard');
   process.exit(cmd ? 1 : 0);
 }
 await commands[cmd]();
