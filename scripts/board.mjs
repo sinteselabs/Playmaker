@@ -34,6 +34,7 @@ import { PROVIDER_IDS, PROVIDERS } from './lib/providers.mjs';
 import { STATUSES, computeReady, withDefaults } from './lib/model.mjs';
 import { howToTestFrom, recallTerms, retro, runPage, scoreEntry, scoreSummary, toTestList } from './lib/report.mjs';
 import { idFromSpec, parsePlan, specSituation } from './lib/blueprint.mjs';
+import { closePr, ghInstalled, openPr, prSetback, prState } from './lib/pr.mjs';
 import { git, killTree, pidAlive, readJson, repoRoot, tryGit, writeJsonAtomic } from './lib/util.mjs';
 import { commandLine, stamp } from './spawn.mjs';
 
@@ -78,11 +79,29 @@ function load() {
 
 const save = (b) => writeJsonAtomic(boardFile, b);
 
+// With "integration": "pr", work merges on the remote: branch from and rebase onto origin/<base>.
+const prMode = (b) => b.integration === 'pr';
+function baseRef(b) {
+  if (!prMode(b)) return b.base;
+  tryGit(root, 'fetch', '-q', 'origin', b.base);
+  return tryGit(root, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${b.base}`) ? `origin/${b.base}` : b.base;
+}
+
+function keepHowToTest(b, t) {
+  if (t.howToTest || !t.worker) return;
+  try {
+    t.howToTest = howToTestFrom(fs.readFileSync(path.join(root, '.playmaker', 'runs', b.run, t.worker, 'result.md'), 'utf8')) || undefined;
+  } catch {
+    // no report: the manager can still set it with `board howto`
+  }
+}
+
 function validate(b) {
   const problems = [];
   if (!Array.isArray(b.tasks) || b.tasks.length === 0) return ['board needs a non-empty "tasks" array.'];
   if (!tryGit(root, 'rev-parse', '--verify', b.base)) problems.push(`base "${b.base}" is not a branch or commit.`);
   if (!Number.isInteger(b.cap) || b.cap < 1 || b.cap > 8) problems.push('cap must be an integer from 1 to 8.');
+  if (!['merge', 'pr'].includes(b.integration)) problems.push(`integration must be "merge" or "pr", not "${b.integration}".`);
   const ids = new Set();
   for (const t of b.tasks) {
     if (!ID_RE.test(t.id || '')) problems.push(`task id "${t.id}" is invalid. Use lowercase letters, digits and dashes.`);
@@ -159,6 +178,28 @@ function sync(b) {
       out.failed.push({ id: t.id, reason: t.feedback, status: t.status });
     }
   }
+  // Pull requests: merged on the remote, or sent back by a review, a closed PR or red checks.
+  out.merged = [];
+  for (const t of b.tasks) {
+    if (t.status !== 'in_review' || !t.pr?.url) continue;
+    const s = prState(t.pr.url, root);
+    if (!s) continue;
+    const setback = prSetback(s);
+    if (s.state === 'MERGED') {
+      out.changed = true;
+      t.status = 'to_test';
+      t.merged = s.mergeCommit;
+      t.pr.state = 'MERGED';
+      t.history.push({ at: new Date().toISOString(), event: 'merged', commit: t.merged, pr: t.pr.url });
+      recordScore(b, t, 'merged');
+      for (const br of t.branches) tryGit(root, 'branch', '-D', br);
+      out.merged.push(t.id);
+    } else if (setback) {
+      out.changed = true;
+      failTask(b, t, `${setback} (${t.pr.url})`);
+      out.failed.push({ id: t.id, reason: t.feedback, status: t.status });
+    }
+  }
   return out;
 }
 
@@ -207,6 +248,7 @@ function cmdStart() {
     return;
   }
   const run = b.run || stamp('b');
+  const base = baseRef(b);
   const byId = new Map(b.tasks.map((t) => [t.id, t]));
   const plans = batch.map((id) => {
     const t = byId.get(id);
@@ -229,7 +271,7 @@ function cmdStart() {
       allow: t.allow,
       extraArgs: t.extraArgs,
       timeoutMin: t.timeoutMin || b.timeoutMin,
-      startPoint: round > 1 && prevBranch ? prevBranch : b.base,
+      startPoint: round > 1 && prevBranch ? prevBranch : base,
     });
     return { t, w, round };
   });
@@ -296,9 +338,13 @@ function cmdIntegrate() {
   if (!t) die(`no task "${id}".`);
   if (t.status !== 'delivered') die(`task "${id}" is "${t.status}", not "delivered".`, 2);
 
-  const current = tryGit(root, 'branch', '--show-current');
-  if (current !== b.base) die(`the main worktree is on "${current}", not on base "${b.base}". Switch it first.`, 2);
-  if (git(root, 'status', '--porcelain')) die('the main worktree has uncommitted changes. Commit or stash them first.', 2);
+  if (!prMode(b)) {
+    const current = tryGit(root, 'branch', '--show-current');
+    if (current !== b.base) die(`the main worktree is on "${current}", not on base "${b.base}". Switch it first.`, 2);
+    if (git(root, 'status', '--porcelain')) die('the main worktree has uncommitted changes. Commit or stash them first.', 2);
+  } else if (!ghInstalled()) {
+    die('this board opens pull requests ("integration": "pr"), and the GitHub CLI (gh) is not installed.', 4);
+  }
 
   const fail = (stage, detail) => {
     failTask(b, t, `${stage}\n${tail(detail)}`);
@@ -308,10 +354,11 @@ function cmdIntegrate() {
   };
 
   // 1. rebase the worker's branch on the current base
-  const rebase = spawnSync('git', ['rebase', b.base], { cwd: t.worktree, encoding: 'utf8' });
+  const base = baseRef(b);
+  const rebase = spawnSync('git', ['rebase', base], { cwd: t.worktree, encoding: 'utf8' });
   if (rebase.status !== 0) {
     spawnSync('git', ['rebase', '--abort'], { cwd: t.worktree });
-    fail(`rebase onto ${b.base} failed`, `${rebase.stdout || ''}${rebase.stderr || ''}`);
+    fail(`rebase onto ${base} failed`, `${rebase.stdout || ''}${rebase.stderr || ''}`);
   }
 
   // 2. gates, run by the manager, never taken from the worker's word
@@ -327,6 +374,41 @@ function cmdIntegrate() {
     return;
   }
 
+  // 3a. pull request mode: push the branch and open a PR; the merge happens on the remote
+  if (prMode(b)) {
+    // A problem here is not the worker's: the task stays delivered and nothing is counted.
+    const push = spawnSync('git', ['push', '-u', 'origin', t.branch], { cwd: t.worktree, encoding: 'utf8' });
+    if (push.status !== 0) die(`could not push ${t.branch} to origin:\n${tail(`${push.stdout || ''}${push.stderr || ''}`, 2000)}`, 4);
+    keepHowToTest(b, t);
+    const label = PROVIDERS[t.provider]?.label || t.provider;
+    const body = [
+      `Task \`${t.id}\` of Playmaker run \`${b.run}\`, delivered by ${label}. The manager rebased it on \`${b.base}\` and ran the gates${b.gates.length ? `: ${b.gates.map((g) => `\`${g}\``).join(', ')}` : ' (none set)'}.`,
+      '',
+      '## How to test',
+      '',
+      t.howToTest || 'The delivery said nothing about how to test it.',
+      '',
+      '<details><summary>The task as the worker got it</summary>',
+      '',
+      t.brief,
+      '',
+      '</details>',
+    ].join('\n');
+    const bodyFile = path.join(root, '.playmaker', 'runs', b.run, t.worker, 'pr.md');
+    fs.writeFileSync(bodyFile, body);
+    const previous = t.pr?.url && t.pr.state !== 'MERGED' ? t.pr.url : null;
+    const pr = openPr({ cwd: t.worktree, base: b.base, head: t.branch, title: t.title || t.id, bodyFile });
+    if (pr.error) die(`could not open the pull request:\n${tail(pr.error, 2000)}`, 4);
+    if (previous) closePr(previous, `Superseded by round ${t.round}: ${pr.url}`, root);
+    t.status = 'in_review';
+    t.pr = { url: pr.url, branch: t.branch, state: 'OPEN' };
+    t.history.push({ at: new Date().toISOString(), event: 'pr-opened', pr: pr.url });
+    removeWorktree(root, t.worktree);
+    save(b);
+    console.log(JSON.stringify({ task: id, ok: true, merged: false, pr: pr.url, status: t.status, gates: gateResults }, null, 2));
+    return;
+  }
+
   // 3. fast-forward merge, never force
   const merge = spawnSync('git', ['merge', '--ff-only', t.branch], { cwd: root, encoding: 'utf8' });
   if (merge.status !== 0) fail('fast-forward merge failed', `${merge.stdout || ''}${merge.stderr || ''}`);
@@ -335,13 +417,7 @@ function cmdIntegrate() {
   t.merged = git(root, 'rev-parse', 'HEAD');
   t.history.push({ at: new Date().toISOString(), event: 'merged', commit: t.merged });
   recordScore(b, t, 'merged');
-  if (!t.howToTest) {
-    try {
-      t.howToTest = howToTestFrom(fs.readFileSync(path.join(root, '.playmaker', 'runs', b.run, t.worker, 'result.md'), 'utf8')) || undefined;
-    } catch {
-      // no report: the manager can still set it with `board howto`
-    }
-  }
+  keepHowToTest(b, t);
   removeWorktree(root, t.worktree);
   for (const br of t.branches) tryGit(root, 'branch', '-D', br);
   save(b);
@@ -352,7 +428,7 @@ function cmdSync() {
   const b = load();
   const ch = sync(b);
   if (ch.changed) save(b);
-  console.log(JSON.stringify({ delivered: ch.delivered, failed: ch.failed }, null, 2));
+  console.log(JSON.stringify({ delivered: ch.delivered, merged: ch.merged, failed: ch.failed }, null, 2));
 }
 
 const TERMINAL = ['done', 'failed', 'error', 'timeout', 'stale'];
@@ -369,6 +445,7 @@ async function cmdWatch() {
   const seen = new Set();
   let first = true;
   let wasRunning = false;
+  let polls = 0;
   for (;;) {
     const b = readJson(boardFile);
     if (b?.run && Array.isArray(b.tasks)) {
@@ -402,11 +479,27 @@ async function cmdWatch() {
           lines.push(`Playmaker: the ${by} worker for task ${t.id} ended as "${state}"${why}. It counts as a failed round.`);
         }
       }
+      // Open pull requests: asked once a minute, and only when gh is there to ask.
+      if (polls % 20 === 0 && ghInstalled()) {
+        for (const t of b.tasks) {
+          if (t.status !== 'in_review' || !t.pr?.url) continue;
+          const s = prState(t.pr.url, root);
+          const why = s && (s.state === 'MERGED' ? 'merged' : prSetback(s));
+          if (!why || seen.has(`${t.pr.url}:${why}`)) continue;
+          seen.add(`${t.pr.url}:${why}`);
+          lines.push(
+            why === 'merged'
+              ? `Playmaker: the pull request for task ${t.id} was merged (${t.pr.url}). Sync the board: it moves to To test and unblocks what depends on it.`
+              : `Playmaker: task ${t.id} goes back for another round: ${why} (${t.pr.url}). Sync the board.`
+          );
+        }
+      }
       if (wasRunning && running.length === 0) lines.push('Playmaker: no worker is running any more. Check the board for what can start next.');
       wasRunning = running.length > 0;
       for (const line of lines) console.log(line);
     }
     first = false;
+    polls += 1;
     await new Promise((r) => setTimeout(r, 3000));
   }
 }
@@ -615,7 +708,7 @@ function cmdReport() {
   if (flag('--json')) {
     return console.log(JSON.stringify(Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.map((t) => ({ id: t.id, commit: t.merged, attempts: t.attempts, note: t.note, feedback: t.feedback }))])), null, 2));
   }
-  const order = ['to_test', 'done', 'delivered', 'in_progress', 'rework', 'refix', 'postponed', 'not_started'];
+  const order = ['to_test', 'done', 'delivered', 'in_review', 'in_progress', 'rework', 'refix', 'postponed', 'not_started'];
   for (const s of order) {
     if (!groups[s]) continue;
     console.log(`${s} (${groups[s].length})`);
@@ -624,6 +717,7 @@ function cmdReport() {
       const extra = [
         started ? `${PROVIDERS[t.provider]?.label || t.provider}, ${Math.round((Date.now() - Date.parse(started.at)) / 60000)} min` : null,
         t.merged ? `commit ${t.merged.slice(0, 8)}` : null,
+        s === 'in_review' && t.pr?.url ? t.pr.url : null,
         t.attempts ? `${t.attempts} failed attempt(s)` : null,
         t.note,
         s === 'refix' || s === 'rework' ? t.feedback?.split('\n')[0] : null,

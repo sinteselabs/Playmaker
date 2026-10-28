@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 export const isWin = process.platform === 'win32';
 
@@ -79,6 +79,12 @@ export function readJson(file, fallback = null) {
 export function quoteWin(arg) {
   const escaped = String(arg).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1');
   return `"${escaped}"`;
+}
+
+/** Run a CLI and wait for it, the way the supervisor starts one: npm shims on Windows need a shell. */
+export function runCommand(command, args, options = {}) {
+  if (isWin) return spawnSync([command, ...args.map(quoteWin)].join(' '), [], { ...options, shell: true, encoding: 'utf8', windowsHide: true });
+  return spawnSync(command, args, { ...options, encoding: 'utf8' });
 }
 
 export function pidAlive(pid) {
