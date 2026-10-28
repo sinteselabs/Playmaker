@@ -45,6 +45,7 @@ Every command is `/sintese-playmaker:<name>`.
 | `park <task> [why]` | Takes a task out of the run for now, stopping its worker if it is running. |
 | `done <task...> \| all` | Marks tasks you tested as Done. Nothing else ever marks a task Done. |
 | `stop [task...]` | Stops running workers and cleans up their worktrees and branches. The board stays, so `go` picks up later. |
+| `scorecard [--save]` | How each agent CLI has done in this repository: tasks merged, on the first round, parked, rounds, minutes. `--save` copies it to Lore. |
 | `doctor [--gates] [--smoke]` | Checks node, git, the board and every agent CLI. `--gates` runs your gates in a fresh worktree; `--smoke` proves each CLI is logged in. Also says whether Lore is connected. |
 
 And `/playmaker` shows or hides the live board.
@@ -217,6 +218,11 @@ board retry <task> [--note ".."] re-arms a parked or failed task
 board stop [task...]           stops workers, removes their worktrees and branches
 board set <task> <status> [--note ".."] [--confirmed-by-user]
 board report [--json]          summary for the user
+board recall [task...]         words to search project memory with, per task
+board context <task> --file F  what the project knows, added to the task's next brief
+board page                     the run's page for Lore, as JSON
+board retro [--json]           what happened in the run, per task
+board scorecard [--json]       how each provider has done in this repository
 doctor [--gates] [--smoke [ids]] [--json]
 status [run] [--json] [--overlap]   per-worker view
 detect                         which agent CLIs are installed
@@ -255,20 +261,37 @@ board and no integration (at most 6 workers).
 The command line of each CLI and its caveats are in
 [`skills/plan/references/providers.md`](skills/plan/references/providers.md).
 
-## Lore, optional
+## Project memory with Lore
 
-[Lore](https://github.com/akitaonrails/ai-memory) is used as shared memory on top
-of files and git, never as a requirement. When a run starts, the `go` skill
-looks for a `parallel-run` rule with `memory_query` and follows the team's live
-rule where it differs from the plugin's defaults. With your "yes", it can also
-record the run's plan as a page that expires, leave a handoff if the session
-ends before the workers do, and use the inbox when a task belongs to another
-repository. The details are in
+[Lore](https://github.com/akitaonrails/ai-memory) is shared memory on top of
+files and git, never a requirement. When its tools are connected, the offer asks
+whether to use project memory for the run (yes by default), and then:
+
+- **Before each worker starts, it learns what the project already knows.** The
+  manager searches Lore with words taken from the task (its id, title and the
+  files it owns), keeps the decisions, gotchas and rules that apply, and puts
+  them in the brief under "What this project already knows". The worker gets
+  them even when its own CLI has no Lore.
+- **The run is visible to the team** as a page in Lore that the manager keeps
+  current and that expires a week later. Workers whose CLI has Lore declare
+  their own work page, as the team's parallel-run rule asks.
+- **At the end, the run is remembered**: a retrospective (what merged, on which
+  round, what went wrong) and the provider scorecard go to Lore, and the manager
+  offers to turn a repeated problem into a gotcha page.
+- **The team's own `parallel-run` rule** is read first and followed where it
+  differs from the plugin's defaults.
+
+Two things work without Lore. The **scorecard** lives in
+`.playmaker/scorecard.json` and fills on its own as tasks merge or get parked,
+so `/sintese-playmaker:scorecard` and the provider suggestions in the offer use
+it either way. And when a session ends mid-run, the next one in that repository
+**is told the run is unfinished** and how to resume it; with Lore, the manager
+can also leave a handoff.
+
+The scripts do the deterministic part (`board recall`, `context`, `page`,
+`retro`, `scorecard`) and print what to write; only the manager agent calls
+Lore. The details are in
 [`skills/plan/references/coordination.md`](skills/plan/references/coordination.md).
-
-Lore messages go between **projects** and are delivered once, so they are not
-part of the loop: the workers of a run belong to the same project and only talk
-to the manager.
 
 ## Known limits
 
@@ -309,7 +332,9 @@ checks that at the end everything is at `To test`, main is clean and no worktree
 or branch is left. The smoke test covers the single-batch launcher, the hooks
 and the validation errors. The commands test covers the monitor (one line per
 delivery, never a write), `sync`, `reject`, `stop`, `retry`, a report without a
-board, and the doctor with its gates and smoke checks.
+board, and the doctor with its gates and smoke checks. The memory test covers the
+search words, the context in the brief, the run's page, the retrospective, the
+scorecard, and the session start note about an unfinished run.
 
 ```bash
 claude plugin test          # the live board pane, with no session (tests/panel.test.ts)
@@ -328,7 +353,7 @@ monitors/monitors.json              the monitor that announces deliveries
 skills/plan/                        when to offer, how to offer, how to build the board
 skills/plan/references/             board, brief, providers, coordination and Lore
 skills/go/                          the manager loop
-skills/board, merge, retry, park, done, stop, doctor/   the commands
+skills/board, merge, retry, park, done, stop, scorecard, doctor/   the commands
 scripts/board.mjs                   board: ready, start, sync, watch, integrate, reject, retry, stop, report
 scripts/doctor.mjs                  setup checks, gates in a fresh worktree, smoke test per CLI
 scripts/spawn.mjs                   worker supervisor and single-batch launcher
@@ -336,6 +361,7 @@ scripts/status.mjs                  worker state and file overlap
 scripts/detect-agents.mjs           detects installed CLIs
 scripts/task-watch.mjs              counts open tasks and gives the nudge
 scripts/lib/model.mjs               board defaults, collisions and the ready set, shared with the pane
+scripts/lib/report.mjs              search words, the run's page, retrospective and scorecard
 scripts/lib/launch.mjs              worktree, brief and start of each worker
 scripts/lib/providers.mjs           how each CLI is started
 cli/playmaker.mjs                   the npm CLI: init and the scripts above

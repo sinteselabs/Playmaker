@@ -53,6 +53,8 @@ Tier 3 is what this plugin is for. For tiers 1 and 2, spawn the agents natively,
 
 Which CLIs are installed: `node "${CLAUDE_PLUGIN_ROOT}/scripts/detect-agents.mjs" --print`. Provider flags and caveats: `references/providers.md`.
 
+How each provider has done in this repository: `node "${CLAUDE_PLUGIN_ROOT}/scripts/board.mjs" scorecard --json` (empty until tasks have merged or been parked here). Where it has data, let it weigh in the suggested provider and say so in the offer ("Codex merged 5 of 6 on the first round here"). A few tasks are not a trend: say how many it is based on.
+
 ## 3. Make the offer
 
 One message, short, in the user's language:
@@ -62,12 +64,14 @@ One message, short, in the user's language:
 3. Cost note: each worker is a separate session with its own context and its own quota.
 4. What happens to the work: after each worker delivers, you rebase its branch, run the project's gates yourself and merge it, unless the user prefers to approve each merge. Merged tasks wait at `To test`. Only the user promotes a task to `Done`.
 5. That you will tell them when everything is finished.
+6. Only when Lore tools are available: what project memory adds. Before each worker starts, you look up what the project already knows about its files and put it in its brief; the run keeps a page in Lore that expires in a week; at the end you record the retrospective and the provider scorecard, and offer to turn repeated problems into gotcha pages.
 
 Then ask (AskUserQuestion if available):
 
 - Go as proposed / change the split or providers / not now.
 - Merge policy: merge automatically when the gates pass (default, as the parallel-run rule does), or ask before each merge.
 - Autonomous or not: if autonomous, a task that needs something only the user can do becomes a to-do and is skipped instead of stopping the run.
+- Only when Lore tools are available: use project memory for this run (default yes) or keep the run out of it. A yes is the user's permission to write the run's pages; record it as `"lore": true` in the board.
 
 If the user picks "not now", continue the original work yourself and do not bring it up again for this plan.
 
@@ -98,7 +102,7 @@ Before the first start, check the repo:
 - It must be committed. Workers branch from the committed state of the base branch and will not see uncommitted changes. If there are uncommitted changes, tell the user and ask whether to commit first.
 - The main worktree must be on the base branch, because merges happen there.
 
-Then follow the `sintese-playmaker:go` skill. If Lore tools are available and the user agreed, register the run as described in `references/coordination.md`.
+Then follow the `sintese-playmaker:go` skill. With `"lore": true`, it also does the project memory steps, described there and in `references/coordination.md`.
 
 ## Rules that do not bend
 

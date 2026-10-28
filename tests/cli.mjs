@@ -33,7 +33,7 @@ assert.deepEqual(fs.readdirSync(tmp), [], 'dry run wrote nothing');
 const first = cli(['init'], tmp);
 assert.equal(first.status, 0, first.stderr);
 const SKILLS = fs.readdirSync(path.join(ROOT, 'skills')).sort();
-assert.deepEqual(SKILLS, ['board', 'doctor', 'done', 'go', 'merge', 'park', 'plan', 'retry', 'stop']);
+assert.deepEqual(SKILLS, ['board', 'doctor', 'done', 'go', 'merge', 'park', 'plan', 'retry', 'scorecard', 'stop']);
 for (const dir of ['.claude/skills', '.agents/skills']) {
   for (const skill of SKILLS) {
     const file = path.join(tmp, dir, `playmaker-${skill}`, 'SKILL.md');

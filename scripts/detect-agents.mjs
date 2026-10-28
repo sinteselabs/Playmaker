@@ -31,6 +31,26 @@ function runningWorkers(root) {
   return count;
 }
 
+/**
+ * One line about a run this repository left unfinished, or null. It is how a new session picks up
+ * where the last one stopped, with or without Lore: the board and the workers are on disk.
+ */
+export function unfinishedRun(root) {
+  if (!root) return null;
+  const b = readJson(path.join(root, '.playmaker', 'board.json'));
+  if (!b?.run || !Array.isArray(b.tasks)) return null;
+  const count = (...statuses) => b.tasks.filter((t) => statuses.includes(t.status || 'not_started')).length;
+  const running = count('in_progress');
+  const delivered = count('delivered');
+  const waiting = count('not_started', 'rework');
+  if (!running && !delivered && !waiting) return null;
+  const parts = [running ? `${running} running` : '', delivered ? `${delivered} delivered and not integrated` : '', waiting ? `${waiting} waiting` : ''].filter(Boolean);
+  return (
+    `Playmaker: run ${b.run} in this repository is unfinished (${parts.join(', ')}). ` +
+    'If the user wants to continue it, the sintese-playmaker:go skill resumes it from the board on disk; /sintese-playmaker:board shows it. Do not resume without being asked.'
+  );
+}
+
 export function detect(cwd = process.cwd()) {
   const providers = {};
   for (const [id, p] of Object.entries(PROVIDERS)) {
@@ -58,15 +78,19 @@ if (args.includes('--hook')) {
   }
   const ids = Object.keys(result.providers);
   const worthSaying = option('proactive', 'true') !== 'false' && (ids.length >= 2 || result.running > 0 || result.agentTeams);
+  const parts = [];
   if (worthSaying) {
-    const parts = [
+    parts.push(
       `Playmaker: agent CLIs on PATH: ${ids.join(', ') || 'none'}.`,
       `Agent teams: ${result.agentTeams ? 'enabled' : 'off'}.`,
       `Playmaker workers running in this repo: ${result.running}.`,
-      'The sintese-playmaker:plan and sintese-playmaker:go skills cover parallel execution; /sintese-playmaker:board shows a run.',
-    ];
-    process.stdout.write(hookOutput('SessionStart', parts.join(' ')));
+      'The sintese-playmaker:plan and sintese-playmaker:go skills cover parallel execution; /sintese-playmaker:board shows a run.'
+    );
   }
+  // Not a nudge: it reports work the user already started, so it is said even with proactive offers off.
+  const resume = unfinishedRun(repoRoot(input.cwd || process.cwd()));
+  if (resume) parts.push(resume);
+  if (parts.length) process.stdout.write(hookOutput('SessionStart', parts.join(' ')));
 } else if (args.includes('--print')) {
   process.stdout.write(JSON.stringify(detect(), null, 2) + '\n');
 } else {
