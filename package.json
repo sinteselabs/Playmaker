@@ -1,6 +1,6 @@
 {
   "name": "playmakerlabs",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Parallel multi-agent orchestration: one manager agent runs workers on the CLIs you already have (Claude Code, Codex, Gemini, Antigravity, Copilot) in isolated git worktrees.",
   "license": "MIT",
   "type": "module",
@@ -12,6 +12,7 @@
   },
   "files": [
     ".claude-plugin/",
+    "agents/",
     "cli/",
     "hooks/",
     "monitors/",
@@ -22,7 +23,7 @@
   ],
   "scripts": {
     "test": "node tests/cli.mjs",
-    "test:e2e": "node tests/board.mjs && node tests/smoke.mjs && node tests/commands.mjs && node tests/memory.mjs"
+    "test:e2e": "node tests/board.mjs && node tests/smoke.mjs && node tests/commands.mjs && node tests/memory.mjs && node tests/integrations.mjs"
   },
   "author": "Síntese Labs",
   "homepage": "https://github.com/sinteselabs/Playmaker#readme",
