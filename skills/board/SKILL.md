@@ -10,7 +10,7 @@ Talk to the user in their own language. Run commands from the main worktree of t
 
 Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/board.mjs" report`. It folds finished workers into the board first, so what it prints is current.
 
-Show the result as one short table: task, status, and the detail that matters for that status (provider and minutes while running, commit once merged, the reason when held, rework or parked). Statuses in the user's words: running, delivered (waiting to be integrated), to test, done, rework, parked (refix), postponed, not started.
+Show the result as one short table: task, status, and the detail that matters for that status (provider and minutes while running, commit once merged, the reason when held, rework or parked). Statuses in the user's words: running, delivered (waiting to be integrated), in review (a pull request is open, with its link), to test, done, rework, parked (refix), postponed, not started.
 
 Then, only where it applies, one line each on what the user can do next:
 

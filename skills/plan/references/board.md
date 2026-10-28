@@ -47,6 +47,7 @@
 | `timeoutMin` | Per worker. Default 30. A task can override it. |
 | `mergePolicy` | `auto` (merge when gates pass) or `ask` (manager asks the user first). Followed by the manager, not enforced by the script. |
 | `autonomous` | Blocked-on-user tasks become to-dos instead of stopping the run. Followed by the manager. |
+| `integration` | `merge` (default): the manager fast-forwards each delivery into `base` locally. `pr`: integrate pushes the task's branch to `origin` and opens a pull request with `gh`; the merge happens on GitHub, `board sync` reads it, and workers branch from `origin/<base>`. |
 | `gates` | Commands run by `board integrate` in the worker's worktree after the rebase. They run in a fresh worktree, so include install steps. They also go into every worker's brief. |
 | `sharedFiles` | Files that at most one running task may own: project file, router, entry point, lockfiles, rules files. |
 | `lore` | `true` when the user accepted using project memory for this run. The manager then attaches what each task should know, keeps the run's page in Lore and records the retrospective. Workers are asked to declare their own work page if their CLI has Lore. |
@@ -67,13 +68,15 @@ Task fields:
 | `kind` | Optional label for the kind of work (`tests`, `frontend`, `migration`...). The provider scorecard also counts by provider and kind. |
 | `context` | Set with `board context <task> --file notes.md`: what the project already knows that applies to this task. Added to its next brief. |
 
-Fields the script maintains: `status`, `attempts`, `round`, `worker`, `branch`, `worktree`, `branches`, `merged` (commit), `feedback`, `history`. The board also gets a `run` id when the first worker starts.
+Fields the script maintains: `status`, `attempts`, `round`, `worker`, `branch`, `worktree`, `branches`, `merged` (commit), `feedback`, `history`, and `pr` (`url`, `branch`, `state`) in pull request mode. The board also gets a `run` id when the first worker starts.
 
 Beside the board, `.playmaker/scorecard.json` outlives every run: each task that merges or is parked as ReFix adds one entry (provider, kind, rounds, failed rounds, minutes to merge). `board scorecard` sums it up.
 
 ## Statuses
 
-`not_started`, `in_progress`, `delivered`, `rework`, `to_test`, `refix`, `done`, `postponed`.
+`not_started`, `in_progress`, `delivered`, `in_review`, `rework`, `to_test`, `refix`, `done`, `postponed`.
+
+`in_review` exists only with `"integration": "pr"`: the task's pull request is open. It takes no worker slot but keeps its files for the collision check, and tasks that depend on it wait for the merge.
 
 These mirror a common task state machine (Not started, In progress, To test, ReFix, Done, Postpone). `delivered` (worker finished, not integrated) and `rework` (failed round, will be retried) are the two extra states the manager loop needs.
 

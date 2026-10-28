@@ -71,6 +71,7 @@ Then ask (AskUserQuestion if available):
 
 - Go as proposed / change the split or providers / not now.
 - Merge policy: merge automatically when the gates pass (default, as the parallel-run rule does), or ask before each merge.
+- How work reaches the base branch: merged locally by you after the gates (default), or one pull request per task, which pushes each task's branch to `origin` and lets the project's reviewers and CI decide the merge on GitHub. Offer it when the project works through pull requests or the user mentions review or CI. It needs `gh` logged in and a remote; a yes is the user's permission to push those branches. Record it as `"integration": "pr"`.
 - Autonomous or not: if autonomous, a task that needs something only the user can do becomes a to-do and is skipped instead of stopping the run.
 - Only when Lore tools are available: use project memory for this run (default yes) or keep the run out of it. A yes is the user's permission to write the run's pages; record it as `"lore": true` in the board.
 

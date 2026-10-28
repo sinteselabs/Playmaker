@@ -39,12 +39,13 @@ If no notification can reach you (Claude Code without monitors, a `-p` session, 
 3. If the change is wrong or out of scope, send it back: `board reject <task> --note "<what is wrong, specifically>"`. That counts as a failed round, and the note goes into the next worker's brief.
 4. Otherwise integrate: `board integrate <task>`. It rebases the branch on the current base, runs the gates itself in the worktree, fast-forwards the merge (never forced), sets the task to `to_test` and removes the worktree and branch. With `mergePolicy: ask`, show the user a short summary of the diff first and integrate only after they say yes (they can also run `/sintese-playmaker:merge <task>` themselves).
    After a merge, the task's "how to test" comes from the "How to test" section of the worker's report. If the report had none, or it is wrong, write one from the diff and set it: `board howto <task> --file <file>`.
+   **With `"integration": "pr"`,** integrate does not merge: after the rebase on `origin/<base>` and the gates, it pushes the branch and opens a pull request (title, how to test, the brief), and the task goes to `in_review`. It takes no worker slot but keeps its files, and what depends on it waits. It moves on when the PR is merged on GitHub, by the project's reviewers or the user, never by you: `board sync` reads each open PR (the monitor checks once a minute and tells you), a merge moves the task to `to_test`, and changes requested, failing checks or a closed PR send it back for another round, whose PR supersedes and closes the old one. New tasks branch from `origin/<base>`, where the merges land. Exit 4 means the push or `gh` failed: nothing was counted and the task is still delivered; tell the user what to fix (`gh auth login`, the remote) and integrate again.
 5. If integrate fails (exit 3), the board has already counted the failed round and kept the output. The task goes to `rework` and the next `board start` sends a new worker back on top of the same branch with the failure in its brief. After two failed rounds the task is parked as `refix` with the problem recorded. Do not fix it yourself.
 6. A worker that failed, timed out or made no change is handled the same way by `board sync`.
 
 **4. Go back to step 1.** A delivery usually unblocks new tasks. Start them now, do not wait for the rest of the batch.
 
-**5. Stop** when nothing is running and `board ready` has an empty batch, or when the user's end condition is reached.
+**5. Stop** when nothing is running and `board ready` has an empty batch, or when the user's end condition is reached. With pull requests still open, report them with their links and end there: reviews take their own time, and `/sintese-playmaker:go` picks the run up once they are merged.
 
 ## Project memory (Lore)
 
@@ -57,7 +58,7 @@ Only when Lore tools are available (`mcp__lore__*` or `mcp__Lore__*`, possibly d
 
 ## Statuses
 
-`not_started` → `in_progress` → `delivered` → `to_test` (merged, waiting for the user) → `done` (only the user decides). `rework` is a failed round that will be retried, `refix` is parked after two failed rounds, `postponed` is set by you or the user.
+`not_started` → `in_progress` → `delivered` → (`in_review`, with pull requests: the PR is open) → `to_test` (merged, waiting for the user) → `done` (only the user decides). `rework` is a failed round that will be retried, `refix` is parked after two failed rounds, `postponed` is set by you or the user.
 
 The user can steer the run at any time with the plugin's commands: `/sintese-playmaker:board` (where things stand), `/sintese-playmaker:merge`, `/sintese-playmaker:retry`, `/sintese-playmaker:park`, `/sintese-playmaker:done`, `/sintese-playmaker:stop` and `/sintese-playmaker:doctor`. When one of them changes the board, read `board report` before your next step.
 
