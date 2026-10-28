@@ -49,6 +49,7 @@
 | `autonomous` | Blocked-on-user tasks become to-dos instead of stopping the run. Followed by the manager. |
 | `gates` | Commands run by `board integrate` in the worker's worktree after the rebase. They run in a fresh worktree, so include install steps. They also go into every worker's brief. |
 | `sharedFiles` | Files that at most one running task may own: project file, router, entry point, lockfiles, rules files. |
+| `lore` | `true` when the user accepted using project memory for this run. The manager then attaches what each task should know, keeps the run's page in Lore and records the retrospective. Workers are asked to declare their own work page if their CLI has Lore. |
 
 Task fields:
 
@@ -63,8 +64,12 @@ Task fields:
 | `deps` | Task ids that must be merged first. |
 | `blockedOnUser` | `true` while the task needs something only the user can do. The task is held. |
 | `model`, `allow`, `extraArgs` | Optional per-worker CLI settings. `extraArgs` is where an explicit flag the user asked for goes. |
+| `kind` | Optional label for the kind of work (`tests`, `frontend`, `migration`...). The provider scorecard also counts by provider and kind. |
+| `context` | Set with `board context <task> --file notes.md`: what the project already knows that applies to this task. Added to its next brief. |
 
 Fields the script maintains: `status`, `attempts`, `round`, `worker`, `branch`, `worktree`, `branches`, `merged` (commit), `feedback`, `history`. The board also gets a `run` id when the first worker starts.
+
+Beside the board, `.playmaker/scorecard.json` outlives every run: each task that merges or is parked as ReFix adds one entry (provider, kind, rounds, failed rounds, minutes to merge). `board scorecard` sums it up.
 
 ## Statuses
 
