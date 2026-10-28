@@ -100,7 +100,13 @@ export function layout(v) {
     },
     {
       title: 'To test',
-      rows: having('to_test').map((t) => ({ id: t.id, glyph: '✓', color: 'green', detail: t.merged ? `merged ${t.merged.slice(0, 7)}` : 'merged', action: { label: 'Done', skill: 'done' } })),
+      rows: having('to_test').map((t) => ({
+        id: t.id,
+        glyph: '✓',
+        color: 'green',
+        detail: t.howToTest ? `test: ${firstLine(t.howToTest)}` : t.merged ? `merged ${t.merged.slice(0, 7)}` : 'merged',
+        action: { label: 'Done', skill: 'done' },
+      })),
     },
   ].filter((s) => s.rows.length);
 

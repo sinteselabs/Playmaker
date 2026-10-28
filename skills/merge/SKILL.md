@@ -15,7 +15,8 @@ Task: $ARGUMENTS
 2. Review before merging, as the manager would:
    - the worker's report, `.playmaker/runs/<run>/<worker>/result.md` (a claim, not proof);
    - `git diff --stat <base>...<branch>` and the diff of the files that matter;
-   - whether every changed file is inside the task's `owns` (and `shared`).
+   - whether every changed file is inside the task's `owns` (and `shared`);
+   - unless the change is a few lines, the plugin's reviewer agent (`sintese-playmaker:reviewer`, through the Agent tool) with the task id, the brief and report paths, the branch, the base and the task's `owns`. Show its verdict and findings with yours.
 3. Tell the user in a few lines what the change does and anything wrong you found.
    - If something is clearly wrong or out of scope, ask whether to send it back. On yes: `board reject <task> --note "<the specific problem>"`.
    - Otherwise integrate: the user typing this command is the approval.

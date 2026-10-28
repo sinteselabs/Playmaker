@@ -33,7 +33,7 @@ assert.deepEqual(fs.readdirSync(tmp), [], 'dry run wrote nothing');
 const first = cli(['init'], tmp);
 assert.equal(first.status, 0, first.stderr);
 const SKILLS = fs.readdirSync(path.join(ROOT, 'skills')).sort();
-assert.deepEqual(SKILLS, ['board', 'doctor', 'done', 'go', 'merge', 'park', 'plan', 'retry', 'scorecard', 'stop']);
+assert.deepEqual(SKILLS, ['board', 'doctor', 'done', 'go', 'merge', 'park', 'plan', 'retry', 'scorecard', 'stop', 'totest']);
 for (const dir of ['.claude/skills', '.agents/skills']) {
   for (const skill of SKILLS) {
     const file = path.join(tmp, dir, `playmaker-${skill}`, 'SKILL.md');
@@ -49,6 +49,9 @@ assert.ok(goSkill.includes('`playmaker-merge`'), 'commands named by their copied
 const doctorSkill = fs.readFileSync(path.join(tmp, '.agents/skills/playmaker-doctor/SKILL.md'), 'utf8');
 assert.ok(doctorSkill.includes(`npx -y playmakerlabs@${version} doctor`), 'doctor goes through the pinned CLI');
 assert.ok(fs.existsSync(path.join(tmp, '.agents/skills/playmaker-plan/references/board.md')), 'references are copied');
+const reviewer = fs.readFileSync(path.join(tmp, '.claude/agents/playmaker-reviewer.md'), 'utf8');
+assert.match(reviewer, /^name: playmaker-reviewer$/m, 'the reviewer agent comes too, for Claude Code');
+assert.ok(goSkill.includes('`playmaker-reviewer`'), 'and the skills name it by its copied name');
 
 // a second init keeps every file, and never overwrites one -------------------
 const mine = path.join(tmp, '.claude/skills/playmaker-go/SKILL.md');

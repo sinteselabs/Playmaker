@@ -82,26 +82,35 @@ export function init(argv, folder, write) {
     }
   }
 
-  const targets = [...new Set((agent ? [agent] : Object.keys(AGENTS)).map((a) => AGENTS[a]))];
-  let created = 0;
-  let kept = 0;
+  const wanted = agent ? [agent] : Object.keys(AGENTS);
+  const targets = [...new Set(wanted.map((a) => AGENTS[a]))];
+  // Each file to copy: where it comes from, where it goes, and the skills folder its links resolve against.
+  const copies = [];
   for (const target of targets) {
     for (const skill of SKILLS) {
       const from = path.join(PACKAGE, 'skills', skill);
-      for (const file of filesUnder(from)) {
-        const rel = path.join(...target.split('/'), `playmaker-${skill}`, path.relative(from, file));
-        const dest = path.join(folder, rel);
-        if (fs.existsSync(dest)) {
-          kept += 1;
-          continue;
-        }
-        created += 1;
-        write(`  ${pretend ? 'would create' : 'created'}  ${rel.split(path.sep).join('/')}`);
-        if (pretend) continue;
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, forProject(fs.readFileSync(file, 'utf8'), target));
-      }
+      for (const file of filesUnder(from)) copies.push({ file, rel: path.join(...target.split('/'), `playmaker-${skill}`, path.relative(from, file)), target });
     }
+  }
+  // Claude Code also reads subagents from the project: the reviewer the go and merge skills call.
+  if (wanted.includes('claude')) {
+    for (const file of filesUnder(path.join(PACKAGE, 'agents'))) {
+      copies.push({ file, rel: path.join('.claude', 'agents', `playmaker-${path.basename(file)}`), target: AGENTS.claude });
+    }
+  }
+  let created = 0;
+  let kept = 0;
+  for (const { file, rel, target } of copies) {
+    const dest = path.join(folder, rel);
+    if (fs.existsSync(dest)) {
+      kept += 1;
+      continue;
+    }
+    created += 1;
+    write(`  ${pretend ? 'would create' : 'created'}  ${rel.split(path.sep).join('/')}`);
+    if (pretend) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, forProject(fs.readFileSync(file, 'utf8'), target));
   }
   if (kept) write(`  kept     ${kept} file${kept === 1 ? '' : 's'} that were already there`);
   write(pretend ? `\nPlaymaker ${version}: ${created} file(s) would be written. Nothing was written.` : `\nPlaymaker ${version}: ${created} file(s) written.`);

@@ -41,6 +41,7 @@ export function workerFooter(w, gates = [], lore = false) {
   }
   lines.push(
     '- Finish with a report that states: what you built, the commit hash, each gate you ran with a summary of its real output, anything you could not do or did not verify, and any decision you took that the user would normally take.',
+    '- End the report with a section headed exactly "How to test": what a person runs or opens to see the change working, and what they should see. It goes to the list of what the user still has to test.',
     ''
   );
   return lines.join('\n');

@@ -8,6 +8,7 @@
 //   a brief with "WRITE: <path>" writes that file and commits it (the board test)
 //     "BREAK-FIRST" leaves a file named BAD on the first round, which the test gate rejects
 //     "SLOW" waits a minute first, so a test can stop it while it runs
+//     "HOWTO: <text>" ends the report with a "How to test" section holding that text
 //   any other brief          writes <name>-was-here.txt and leaves the commit to the supervisor
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,6 +56,8 @@ if (/^BREAK-FIRST/m.test(brief) && !retry) fs.writeFileSync('BAD', 'bad\n');
 execFileSync('git', ['add', '-A'], { stdio: 'ignore' });
 execFileSync('git', ['commit', '-q', '-m', 'feat: ' + target], { stdio: 'ignore' });
 say('report for ' + target);
+const howto = (brief.match(/^HOWTO: (.+)$/m) || [])[1];
+if (howto) console.log('\n## How to test\n' + howto + '\n\n## Notes\nnothing else');
 `;
 
 /** Write the fake agent and one launcher per name into `bin`. Returns an env with `bin` first on PATH. */

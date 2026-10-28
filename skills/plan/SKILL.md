@@ -14,6 +14,7 @@ What the user typed after the command, if they invoked it directly: $ARGUMENTS
 
 Typing the command is the request, so skip section 1 and do not ask whether a parallel run is wanted. Find the work to split:
 
+- **A Blueprint plan** (the repository has `.blueprint/state.md`, or the path is a `plan.md` beside a `specs/` folder): see "From a Blueprint plan" in section 4.
 - **A path** (a Markdown plan, a spec, a task list): read it and split what it describes.
 - **`tasks`**, or nothing: the session's own task list, if it has open tasks, otherwise the plan or the work discussed in this conversation.
 - **Free text**: that is the goal. Read the code it touches before you split it.
@@ -94,6 +95,14 @@ What a good board has:
 - **Self-contained briefs.** Use `references/brief-template.md`. The worker sees nothing of this conversation.
 
 The board's task order is the execution order when two tasks collide: the earlier one goes first.
+
+### From a Blueprint plan
+
+A project that went through Blueprint already has its tasks: a plan (`docs/plan.md`, or wherever `.blueprint/state.md` says the documents are) lists them by phase, each with a spec in `specs/` that says what it does, what it does not, and when it is done. That spec is the brief.
+
+1. `node "${CLAUDE_PLUGIN_ROOT}/scripts/board.mjs" import <plan.md>` prints a draft board: one task per spec, the spec as its brief plus a note asking the worker to fill in the spec's delivery sections, each phase depending on the one before, and the spec file in `owns`. Nothing is written yet.
+2. Complete it, because the plan cannot say these: the code each task edits (read the spec's "where in the code" part and the code roadmap, and put files or folders in `owns`), the provider per task, the gates, and the shared files. Drop tasks whose `situation` says they are finished. Loosen the phase dependencies where tasks of the next phase do not need all of the previous one: that is where the parallelism comes from.
+3. Make the offer as in section 3, then write it with `board import <plan.md> --write` and your changes, or write the completed JSON yourself, and validate.
 
 ## 5. Hand over
 
