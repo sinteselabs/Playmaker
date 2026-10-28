@@ -23,11 +23,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { makeWorker, removeWorktree, startWorker, checkFree, ID_RE } from './lib/launch.mjs';
 import { PROVIDER_IDS, PROVIDERS } from './lib/providers.mjs';
+import { STATUSES, computeReady, withDefaults } from './lib/model.mjs';
 import { git, killTree, pidAlive, readJson, repoRoot, tryGit, writeJsonAtomic } from './lib/util.mjs';
 import { commandLine, stamp } from './spawn.mjs';
 
-const STATUSES = ['not_started', 'in_progress', 'delivered', 'rework', 'to_test', 'refix', 'done', 'postponed'];
-const MERGED = new Set(['to_test', 'done']);
 const MAX_ATTEMPTS = 2;
 
 const argv = process.argv.slice(2);
@@ -62,35 +61,10 @@ const boardFile = path.join(root, '.playmaker', 'board.json');
 function load() {
   const b = readJson(boardFile);
   if (!b) die(`no board at ${boardFile}. Write it first (format: skills/plan/references/board.md).`);
-  b.base = b.base || 'main';
-  b.cap = b.cap || 4;
-  b.gates = b.gates || [];
-  b.sharedFiles = b.sharedFiles || [];
-  b.timeoutMin = b.timeoutMin || 30;
-  for (const t of b.tasks || []) {
-    t.status = t.status || 'not_started';
-    t.deps = t.deps || [];
-    t.owns = t.owns || [];
-    t.shared = t.shared || [];
-    t.resources = t.resources || [];
-    t.attempts = t.attempts || 0;
-    t.round = t.round || 0;
-    t.branches = t.branches || [];
-    t.history = t.history || [];
-  }
-  return b;
+  return withDefaults(b);
 }
 
 const save = (b) => writeJsonAtomic(boardFile, b);
-const norm = (p) => String(p).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-const pathsOverlap = (x, y) => x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
-
-function collides(a, b) {
-  for (const x of a.owns) for (const y of b.owns) if (pathsOverlap(norm(x), norm(y))) return `both edit ${norm(x)}`;
-  for (const s of a.shared) if (b.shared.includes(s)) return `both need shared file ${s}`;
-  for (const r of a.resources) if (b.resources.includes(r)) return `both need resource ${r}`;
-  return null;
-}
 
 function validate(b) {
   const problems = [];
@@ -130,46 +104,6 @@ function validate(b) {
   };
   for (const t of b.tasks) visit(t.id, []);
   return problems;
-}
-
-function computeReady(b) {
-  const byId = new Map(b.tasks.map((t) => [t.id, t]));
-  const running = b.tasks.filter((t) => t.status === 'in_progress');
-  const candidates = [];
-  const blocked = [];
-  for (const t of b.tasks) {
-    if (!['not_started', 'rework'].includes(t.status)) continue;
-    if (t.blockedOnUser) {
-      blocked.push({ id: t.id, why: 'waiting for something only the user can do' });
-      continue;
-    }
-    const unmet = t.deps.filter((d) => !MERGED.has(byId.get(d)?.status));
-    if (unmet.length) {
-      const parked = unmet.filter((d) => ['refix', 'postponed'].includes(byId.get(d)?.status));
-      blocked.push({ id: t.id, why: parked.length ? `dependency parked: ${parked.join(', ')}` : `waiting for ${unmet.join(', ')} to be merged` });
-      continue;
-    }
-    candidates.push(t);
-  }
-  const batch = [];
-  const slots = b.cap - running.length;
-  for (const c of candidates) {
-    if (batch.length >= slots) {
-      blocked.push({ id: c.id, why: 'no free slot (cap reached)' });
-      continue;
-    }
-    let reason = null;
-    for (const r of [...running, ...batch]) {
-      reason = collides(r, c);
-      if (reason) {
-        reason = `${reason} with ${r.id}`;
-        break;
-      }
-    }
-    if (reason) blocked.push({ id: c.id, why: reason });
-    else batch.push(c);
-  }
-  return { ready: candidates.map((t) => t.id), batch: batch.map((t) => t.id), running: running.map((t) => t.id), blocked };
 }
 
 function failTask(t, reason) {
@@ -526,7 +460,7 @@ function cmdSet() {
 
 function cmdReport() {
   if (!fs.existsSync(boardFile)) {
-    console.log('No Playmaker board in this repository yet. Build one with /sintese-playmaker:plan.');
+    console.log('No Playmaker board in this repository yet. The plan command builds one.');
     return;
   }
   const b = load();

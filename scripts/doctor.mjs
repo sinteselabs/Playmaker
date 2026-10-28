@@ -52,7 +52,7 @@ if (!root) {
   add(branch === base ? 'ok' : 'warn', 'repository', `${root} on ${branch}${branch === base ? '' : ` (merges land on ${base}: switch to it before integrating)`}`);
   if (dirty) add('warn', 'working tree', 'uncommitted changes: workers branch from the committed base and will not see them');
   if (!board) {
-    add('skip', 'board', 'no board yet (/sintese-playmaker:plan builds one)');
+    add('skip', 'board', 'no board yet (the plan command builds one)');
   } else {
     const v = spawnSync(process.execPath, [BOARD, 'validate'], { cwd: root, encoding: 'utf8' });
     const gates = board.gates || [];
