@@ -512,19 +512,23 @@ function cmdScorecard() {
 function cmdImport() {
   const planArg = positional[0];
   if (!planArg) die('usage: import <plan.md> [--write] [--provider id]');
-  const planFile = path.resolve(planArg);
-  if (!fs.existsSync(planFile)) die(`no plan at ${planFile}.`);
+  if (!fs.existsSync(path.resolve(planArg))) die(`no plan at ${path.resolve(planArg)}.`);
+  // Real paths on both sides: a short Windows name (RUNNER~1) or a symlink would make relative paths climb out.
+  const real = (p) => fs.realpathSync.native(p);
+  const planFile = real(path.resolve(planArg));
   const provider = flagValue('--provider') || 'claude';
   if (!PROVIDER_IDS.includes(provider)) die(`unknown provider "${provider}". Known: ${PROVIDER_IDS.join(', ')}.`);
   const items = parsePlan(fs.readFileSync(planFile, 'utf8'));
   if (!items.length) die('found no task in the plan: a task is a numbered line that names its spec in backticks, such as `specs/01-01-name.md`.');
 
-  const rel = (abs) => path.relative(root, abs).split(path.sep).join('/');
+  const repoReal = real(root);
+  const rel = (abs) => path.relative(repoReal, abs).split(path.sep).join('/');
   const phases = [...new Set(items.map((it) => it.phase))];
   const ids = new Set();
   const tasks = items.map((it) => {
-    const specFile = path.resolve(path.dirname(planFile), it.spec);
-    if (!fs.existsSync(specFile)) die(`the plan names ${it.spec}, which does not exist at ${specFile}.`);
+    const named = path.resolve(path.dirname(planFile), it.spec);
+    if (!fs.existsSync(named)) die(`the plan names ${it.spec}, which does not exist at ${named}.`);
+    const specFile = real(named);
     const spec = rel(specFile);
     const text = fs.readFileSync(specFile, 'utf8').trim();
     let id = idFromSpec(spec);
