@@ -1,11 +1,24 @@
 ---
-name: orchestrate
-description: Use when the current work has three or more independent tasks (a task list, backlog, plan or spec that splits into separate files or modules), when a long sequential plan could run in parallel worktrees, or when the user mentions parallel agents, multi-agent, subagents or orchestration. Offers to act as manager of a parallel run with the agent CLIs the user already has installed (Claude Code, Codex, Gemini or Antigravity, Copilot), builds the task board, and hands it to sintese-playmaker:run. Offer once, never launch without approval.
+name: plan
+description: Use when the current work has three or more independent tasks (a task list, backlog, plan or spec that splits into separate files or modules), when a long sequential plan could run in parallel worktrees, or when the user mentions parallel agents, multi-agent, subagents or orchestration. Offers to act as manager of a parallel run with the agent CLIs the user already has installed (Claude Code, Codex, Gemini or Antigravity, Copilot), builds the task board, and hands it to sintese-playmaker:go. Offer once, never launch without approval.
+argument-hint: "[plan file, spec, \"tasks\", or what to split]"
 ---
 
 # Playmaker: decide, offer, build the board
 
 Talk to the user in their own language. This file is in English so any agent can read it.
+
+What the user typed after the command, if they invoked it directly: $ARGUMENTS
+
+## When the user invoked this skill directly
+
+Typing the command is the request, so skip section 1 and do not ask whether a parallel run is wanted. Find the work to split:
+
+- **A path** (a Markdown plan, a spec, a task list): read it and split what it describes.
+- **`tasks`**, or nothing: the session's own task list, if it has open tasks, otherwise the plan or the work discussed in this conversation.
+- **Free text**: that is the goal. Read the code it touches before you split it.
+
+Then pick the tier (section 2), present the split as the offer of section 3 and build the board (section 4) only after the user agrees. If there is nothing that splits into three or more independent tasks, say so plainly and propose doing it in order.
 
 Playmaker follows the manager and worker model of a parallel run: **you are the manager**. You talk to the workers only through the brief you give them and the report they hand back. You talk to the user when the offer is made, after each round if it matters, and when everything is finished. You never implement a delegated task yourself.
 
@@ -13,7 +26,7 @@ Parallel runs pay off when work splits cleanly. They cost more tokens than one s
 
 ## 1. Decide whether to offer
 
-If the user already said "parallel run" or "autonomous parallel run", skip this section and the offer: go to section 4, then `sintese-playmaker:run`.
+If the user already said "parallel run" or "autonomous parallel run", skip this section and the offer: go to section 4, then `sintese-playmaker:go`.
 
 Otherwise offer only when **all** of these hold:
 
@@ -85,7 +98,7 @@ Before the first start, check the repo:
 - It must be committed. Workers branch from the committed state of the base branch and will not see uncommitted changes. If there are uncommitted changes, tell the user and ask whether to commit first.
 - The main worktree must be on the base branch, because merges happen there.
 
-Then follow the `sintese-playmaker:run` skill. If Lore tools are available and the user agreed, register the run as described in `references/coordination.md`.
+Then follow the `sintese-playmaker:go` skill. If Lore tools are available and the user agreed, register the run as described in `references/coordination.md`.
 
 ## Rules that do not bend
 
