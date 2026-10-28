@@ -11,13 +11,19 @@
 //   board.mjs integrate <task> [--no-merge]  rebase on base, run gates, fast-forward merge, clean up
 //   board.mjs set <task> <status> [--note T] [--confirmed-by-user]
 //   board.mjs report [--json]
+//   board.mjs sync                           fold finished workers into the board, print what changed
+//   board.mjs watch                          never exits: one line per delivery or failure (the plugin's monitor)
+//   board.mjs stop [task...]                 stop running workers, remove their worktrees and branches
+//   board.mjs retry <task> [--note T]        re-arm a parked or failed task, with a fresh attempt count
+//   board.mjs reject <task> --note T         send a delivered task back for rework, with the reason
 //
-// Board file: <repo>/.playmaker/board.json, format in skills/orchestrate/references/board.md
+// Board file: <repo>/.playmaker/board.json, format in skills/plan/references/board.md
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { makeWorker, removeWorktree, startWorker, checkFree, ID_RE } from './lib/launch.mjs';
 import { PROVIDER_IDS, PROVIDERS } from './lib/providers.mjs';
-import { git, pidAlive, readJson, repoRoot, tryGit, writeJsonAtomic } from './lib/util.mjs';
+import { git, killTree, pidAlive, readJson, repoRoot, tryGit, writeJsonAtomic } from './lib/util.mjs';
 import { commandLine, stamp } from './spawn.mjs';
 
 const STATUSES = ['not_started', 'in_progress', 'delivered', 'rework', 'to_test', 'refix', 'done', 'postponed'];
@@ -40,14 +46,22 @@ function die(message, code = 1) {
 }
 
 const root = repoRoot();
-if (!root) die('run this from the main worktree of a git repository.');
+if (!root) {
+  // The monitor starts in every session, git repository or not: it has nothing to watch here.
+  if (cmd === 'watch') process.exit(0);
+  if (cmd === 'report') {
+    console.log('Not inside a git repository, so there is no Playmaker board here.');
+    process.exit(0);
+  }
+  die('run this from the main worktree of a git repository.');
+}
 const boardFile = path.join(root, '.playmaker', 'board.json');
 
 // ---------------------------------------------------------------- model
 
 function load() {
   const b = readJson(boardFile);
-  if (!b) die(`no board at ${boardFile}. Write it first (format: skills/orchestrate/references/board.md).`);
+  if (!b) die(`no board at ${boardFile}. Write it first (format: skills/plan/references/board.md).`);
   b.base = b.base || 'main';
   b.cap = b.cap || 4;
   b.gates = b.gates || [];
@@ -372,6 +386,127 @@ function cmdIntegrate() {
   console.log(JSON.stringify({ task: id, ok: true, merged: true, commit: t.merged, status: t.status, gates: gateResults }, null, 2));
 }
 
+function cmdSync() {
+  const b = load();
+  const ch = sync(b);
+  if (ch.changed) save(b);
+  console.log(JSON.stringify({ delivered: ch.delivered, failed: ch.failed }, null, 2));
+}
+
+const TERMINAL = ['done', 'failed', 'error', 'timeout', 'stale'];
+
+// Statuses a finished worker can leave its task in before the manager has acted on it:
+// still in progress (nobody synced yet), or already folded in by a sync.
+const UNHANDLED = ['in_progress', 'delivered', 'rework', 'refix'];
+
+/**
+ * The plugin's monitor. Read-only: it never writes the board, so it cannot race `integrate` or `set`.
+ * Each line it prints reaches the manager as a notification, once per worker; between events it prints nothing.
+ */
+async function cmdWatch() {
+  const seen = new Set();
+  let first = true;
+  let wasRunning = false;
+  for (;;) {
+    const b = readJson(boardFile);
+    if (b?.run && Array.isArray(b.tasks)) {
+      const lines = [];
+      const running = [];
+      for (const t of b.tasks) {
+        if (!t.worker) continue;
+        const key = `${b.run}/${t.worker}`;
+        if (seen.has(key)) continue;
+        const st = readJson(path.join(root, '.playmaker', 'runs', b.run, t.worker, 'status.json'));
+        let state = st?.state || 'queued';
+        if (state === 'running' && !pidAlive(st.supervisorPid)) state = 'stale';
+        if (!TERMINAL.includes(state)) {
+          if (t.status === 'in_progress') running.push(t.id);
+          continue;
+        }
+        seen.add(key);
+        // What finished before this watch started is announced only when it still waits for the manager.
+        if (first) {
+          if (t.status === 'delivered') lines.push(`Playmaker: task ${t.id} was delivered earlier and waits to be integrated.`);
+          continue;
+        }
+        if (!UNHANDLED.includes(t.status)) continue;
+        const by = PROVIDERS[t.provider]?.label || t.provider;
+        if (state === 'done' && st.filesChanged > 0) {
+          lines.push(`Playmaker: task ${t.id} delivered by ${by} (${st.filesChanged} file(s) changed). Review and integrate it.`);
+        } else if (state === 'done') {
+          lines.push(`Playmaker: the ${by} worker for task ${t.id} finished without changing anything. It counts as a failed round.`);
+        } else {
+          const why = st?.error ? `: ${String(st.error).split('\n')[0]}` : '';
+          lines.push(`Playmaker: the ${by} worker for task ${t.id} ended as "${state}"${why}. It counts as a failed round.`);
+        }
+      }
+      if (wasRunning && running.length === 0) lines.push('Playmaker: no worker is running any more. Check the board for what can start next.');
+      wasRunning = running.length > 0;
+      for (const line of lines) console.log(line);
+    }
+    first = false;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+
+/** Kill a worker's supervisor and agent, and remove its worktree and branches. The task keeps its place on the board. */
+function stopTask(b, t) {
+  const st = t.worker ? readJson(path.join(root, '.playmaker', 'runs', b.run, t.worker, 'status.json')) : null;
+  if (st?.supervisorPid && pidAlive(st.supervisorPid)) killTree(st.supervisorPid);
+  if (st?.pid && pidAlive(st.pid)) killTree(st.pid);
+  if (t.worktree) removeWorktree(root, t.worktree);
+  for (const br of t.branches) tryGit(root, 'branch', '-D', br);
+  t.history.push({ at: new Date().toISOString(), event: 'stopped', worker: t.worker });
+  t.status = 'not_started';
+  t.branches = [];
+  delete t.worker;
+  delete t.branch;
+  delete t.worktree;
+}
+
+function cmdStop() {
+  const b = load();
+  if (sync(b).changed) save(b);
+  for (const id of positional) if (!b.tasks.some((t) => t.id === id)) die(`no task "${id}".`);
+  const targets = b.tasks.filter((t) => t.status === 'in_progress' && (!positional.length || positional.includes(t.id)));
+  for (const t of targets) stopTask(b, t);
+  save(b);
+  console.log(JSON.stringify({ stopped: targets.map((t) => t.id) }, null, 2));
+}
+
+function cmdRetry() {
+  const id = positional[0];
+  if (!id) die('usage: retry <task> [--note text]');
+  const b = load();
+  if (sync(b).changed) save(b);
+  const t = b.tasks.find((x) => x.id === id);
+  if (!t) die(`no task "${id}".`);
+  if (!['refix', 'postponed', 'rework', 'not_started'].includes(t.status)) die(`task "${id}" is "${t.status}"; retry takes a parked, postponed or failed task.`, 2);
+  const note = flagValue('--note');
+  const onBranch = t.branch && tryGit(root, 'rev-parse', '--verify', '--quiet', `refs/heads/${t.branch}`);
+  t.status = onBranch ? 'rework' : 'not_started';
+  t.attempts = 0;
+  if (note) t.feedback = `Note from the user: ${note}${t.feedback ? `\n\n${t.feedback}` : ''}`;
+  delete t.note;
+  t.history.push({ at: new Date().toISOString(), event: 'retry', note });
+  save(b);
+  console.log(`${id} -> ${t.status}`);
+}
+
+function cmdReject() {
+  const id = positional[0];
+  const note = flagValue('--note');
+  if (!id || !note) die('usage: reject <task> --note "what is wrong"');
+  const b = load();
+  if (sync(b).changed) save(b);
+  const t = b.tasks.find((x) => x.id === id);
+  if (!t) die(`no task "${id}".`);
+  if (t.status !== 'delivered') die(`task "${id}" is "${t.status}", not "delivered".`, 2);
+  failTask(t, `Rejected in review: ${note}`);
+  save(b);
+  console.log(`${id} -> ${t.status}`);
+}
+
 function cmdSet() {
   const [id, status] = positional;
   if (!id || !status) die('usage: set <task> <status> [--note text] [--confirmed-by-user]');
@@ -390,7 +525,12 @@ function cmdSet() {
 }
 
 function cmdReport() {
+  if (!fs.existsSync(boardFile)) {
+    console.log('No Playmaker board in this repository yet. Build one with /sintese-playmaker:plan.');
+    return;
+  }
   const b = load();
+  if (sync(b).changed) save(b);
   const groups = {};
   for (const t of b.tasks) (groups[t.status] ||= []).push(t);
   if (flag('--json')) {
@@ -401,7 +541,14 @@ function cmdReport() {
     if (!groups[s]) continue;
     console.log(`${s} (${groups[s].length})`);
     for (const t of groups[s]) {
-      const extra = [t.merged ? `commit ${t.merged.slice(0, 8)}` : null, t.attempts ? `${t.attempts} failed attempt(s)` : null, t.note, s === 'refix' || s === 'rework' ? t.feedback?.split('\n')[0] : null]
+      const started = s === 'in_progress' ? t.history.filter((h) => h.event === 'started').pop() : null;
+      const extra = [
+        started ? `${PROVIDERS[t.provider]?.label || t.provider}, ${Math.round((Date.now() - Date.parse(started.at)) / 60000)} min` : null,
+        t.merged ? `commit ${t.merged.slice(0, 8)}` : null,
+        t.attempts ? `${t.attempts} failed attempt(s)` : null,
+        t.note,
+        s === 'refix' || s === 'rework' ? t.feedback?.split('\n')[0] : null,
+      ]
         .filter(Boolean)
         .join('; ');
       console.log(`  - ${t.id}${extra ? `  (${extra})` : ''}`);
@@ -414,9 +561,23 @@ function cmdReport() {
   }
 }
 
-const commands = { validate: cmdValidate, show: cmdShow, ready: cmdReady, start: cmdStart, wait: cmdWait, integrate: cmdIntegrate, set: cmdSet, report: cmdReport };
+const commands = {
+  validate: cmdValidate,
+  show: cmdShow,
+  ready: cmdReady,
+  start: cmdStart,
+  wait: cmdWait,
+  integrate: cmdIntegrate,
+  set: cmdSet,
+  report: cmdReport,
+  sync: cmdSync,
+  watch: cmdWatch,
+  stop: cmdStop,
+  retry: cmdRetry,
+  reject: cmdReject,
+};
 if (!commands[cmd]) {
-  console.log('usage: board.mjs validate | show | ready | start | wait | integrate <task> | set <task> <status> | report');
+  console.log('usage: board.mjs validate | show | ready | start | wait | integrate <task> | set <task> <status> | report | sync | watch | stop [task...] | retry <task> | reject <task> --note T');
   process.exit(cmd ? 1 : 0);
 }
 await commands[cmd]();
