@@ -40,7 +40,7 @@ Every command is `/sintese-playmaker:<name>`.
 | `plan [file, spec or goal]` | Splits the work into tasks that can run side by side, proposes who does each one, and writes the board once you agree. Takes a Blueprint plan as it is. Also offers itself when it notices a good split. |
 | `go` | Starts the run, or resumes it in a new session: starts every task that can safely run, integrates each delivery, starts what it unblocks, and reports at the end. |
 | `board` | Where things stand: what is running and for how long, what was delivered, what waits and why, what is at To test. |
-| `merge <task>` | Reviews one delivery and merges it after the gates pass, or sends it back with the reason. For when you want to approve each merge. |
+| `merge <task>` | Reviews one delivery and merges it after the gates pass (or opens its pull request), or sends it back with the reason. For when you want to approve each merge. |
 | `retry <task> [note]` | Brings back a parked or failed task with a fresh count. The note goes into the next worker's brief. |
 | `park <task> [why]` | Takes a task out of the run for now, stopping its worker if it is running. |
 | `totest [--save]` | Everything merged that you still have to test, with how to test each: what to run or open, and what you should see. |
@@ -155,6 +155,25 @@ its spec's delivery sections, so the plan stays the project's record.
 It reads the plan in whatever language Blueprint wrote it: a task is a numbered
 line that names its spec in backticks.
 
+## Through pull requests
+
+For a project that works through review and CI, the offer can switch how work
+reaches the base branch: instead of the manager merging each delivery locally,
+it pushes the task's branch and opens one pull request per task, with the title,
+how to test it and the brief.
+
+- **The merge is the team's.** Reviewers and CI decide it on GitHub, never the
+  manager. A task with an open PR waits **in review**: it takes no worker slot,
+  but its files stay taken and what depends on it waits for the merge.
+- **The board follows the PR.** When it is merged, the task moves to To test
+  and what it unblocks starts from `origin/<base>`. Changes requested, failing
+  checks or a closed PR send it back for another round, with the reviewer's
+  words in the worker's brief; the new PR closes the old one with a link. The
+  monitor checks open PRs once a minute and the live board lists them.
+- **It needs** a remote named `origin` and the GitHub CLI logged in;
+  `/sintese-playmaker:doctor` checks both. A push or `gh` problem stops the
+  integration without counting a failed round.
+
 ## What is left to test
 
 Every worker ends its report with how to test what it built, and the manager
@@ -239,7 +258,7 @@ board start [--dry-run]        starts the batch
 board sync                     folds finished workers into the board
 board watch                    the monitor: one line per delivery or failure, never exits, never writes
 board wait [--timeout-min N]   waits for a delivery or a failure, where there is no monitor
-board integrate <task>         rebase, gates, ff-only merge
+board integrate <task>         rebase, gates, ff-only merge (or push and open a PR)
 board reject <task> --note ".." sends a delivery back for rework, with the reason
 board retry <task> [--note ".."] re-arms a parked or failed task
 board stop [task...]           stops workers, removes their worktrees and branches
@@ -261,8 +280,8 @@ detect                         which agent CLIs are installed
 The board format is in
 [`skills/plan/references/board.md`](skills/plan/references/board.md).
 Statuses: Not started, In progress, To test, ReFix, Done, Postpone, plus
-`delivered` (worker finished, not integrated yet) and `rework` (failed round,
-will be retried).
+`delivered` (worker finished, not integrated yet), `in_review` (its pull
+request is open) and `rework` (failed round, will be retried).
 
 `spawn --plan plan.json` is still there as a single-batch launcher, with no
 board and no integration (at most 6 workers).
@@ -366,7 +385,11 @@ board, and the doctor with its gates and smoke checks. The memory test covers th
 search words, the context in the brief, the run's page, the retrospective, the
 scorecard, and the session start note about an unfinished run. The
 integrations test imports a Blueprint plan written in Portuguese, runs two of
-its tasks, and checks the "How to test" they carry into the list.
+its tasks, and checks the "How to test" they carry into the list. The pull
+request test uses a local bare repository as origin and a fake GitHub CLI: a
+delivery becomes a PR, changes requested send it back, the next round closes the
+old PR, a merge unblocks what depends on it, and red checks or a closed PR count
+as a failed round. Nothing reaches GitHub.
 
 ```bash
 claude plugin test          # the live board pane, with no session (tests/panel.test.ts)
@@ -396,6 +419,7 @@ scripts/task-watch.mjs              counts open tasks and gives the nudge
 scripts/lib/model.mjs               board defaults, collisions and the ready set, shared with the pane
 scripts/lib/report.mjs              search words, the run's page, retrospective, scorecard, to-test list
 scripts/lib/blueprint.mjs           reads a Blueprint plan and its specs
+scripts/lib/pr.mjs                  pull requests through the GitHub CLI
 scripts/lib/launch.mjs              worktree, brief and start of each worker
 scripts/lib/providers.mjs           how each CLI is started
 cli/playmaker.mjs                   the npm CLI: init and the scripts above
