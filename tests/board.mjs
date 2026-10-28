@@ -1,4 +1,4 @@
-// End-to-end test of the manager loop (board.mjs) with fake agent CLIs. Runs on macOS and Linux.
+// End-to-end test of the manager loop (board.mjs) with fake agent CLIs. Runs on Windows, macOS and Linux.
 //   node tests/board.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { installFakes } from './lib/fakes.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BOARD = path.join(ROOT, 'scripts', 'board.mjs');
@@ -18,24 +19,7 @@ fs.mkdirSync(repo);
 fs.mkdirSync(bin);
 
 // One fake agent used under two provider names. It reads the brief and does what the brief says.
-const fakeAgent = `#!/bin/sh
-brief=.playmaker/brief.md
-test -f $brief || { echo "no brief" >&2; exit 3; }
-f=$(grep -m1 '^WRITE:' $brief | sed 's/^WRITE: //')
-mkdir -p "$(dirname "$f")"
-echo "$f by $(basename "$0")" > "$f"
-if grep -q 'Previous attempt failed' $brief; then rm -f BAD; fi
-if grep -q '^BREAK-FIRST' $brief && ! grep -q 'Previous attempt failed' $brief; then echo bad > BAD; fi
-git add -A >/dev/null 2>&1
-git commit -q -m "feat: $f" >/dev/null 2>&1
-echo "report for $f"
-`;
-for (const name of ['claude', 'codex']) {
-  const file = path.join(bin, name);
-  fs.writeFileSync(file, fakeAgent);
-  fs.chmodSync(file, 0o755);
-}
-const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CLAUDE_PLUGIN_DATA: path.join(tmp, 'data') };
+const env = installFakes(bin, ['claude', 'codex'], { CLAUDE_PLUGIN_DATA: path.join(tmp, 'data') });
 
 const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
 g('init', '-q', '-b', 'main');

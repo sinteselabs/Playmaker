@@ -1,5 +1,4 @@
-// End-to-end smoke test with fake agent CLIs. Runs on macOS and Linux (the fakes are shell scripts).
-// On Windows, test with real CLIs: `node scripts/spawn.mjs --plan plan.json --dry-run` first.
+// End-to-end smoke test with fake agent CLIs. Runs on Windows, macOS and Linux.
 //   node tests/smoke.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { installFakes } from './lib/fakes.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = (name) => path.join(ROOT, 'scripts', name);
@@ -20,27 +20,7 @@ fs.mkdirSync(repo);
 fs.mkdirSync(bin);
 
 // fake CLIs -------------------------------------------------------------
-const fake = (name, body) => {
-  const file = path.join(bin, name);
-  fs.writeFileSync(file, `#!/bin/sh\n${body}\n`);
-  fs.chmodSync(file, 0o755);
-};
-fake(
-  'codex',
-  `out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift;; esac; shift; done
-test -f .playmaker/brief.md || { echo "no brief" >&2; exit 3; }
-echo codex > codex-was-here.txt
-[ -n "$out" ] && echo "codex report" > "$out"
-echo "codex stdout"`
-);
-fake(
-  'claude',
-  `test -f .playmaker/brief.md || { echo "no brief" >&2; exit 3; }
-echo claude > claude-was-here.txt
-echo "claude report"`
-);
-
-const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CLAUDE_PLUGIN_DATA: data };
+const env = installFakes(bin, ['codex', 'claude'], { CLAUDE_PLUGIN_DATA: data });
 const run = (file, args, opts = {}) =>
   spawnSync(process.execPath, [script(file), ...args], { cwd: repo, env, encoding: 'utf8', ...opts });
 
