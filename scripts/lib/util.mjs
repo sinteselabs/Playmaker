@@ -112,7 +112,17 @@ export function hookOutput(eventName, additionalContext) {
   return JSON.stringify({ hookSpecificOutput: { hookEventName: eventName, additionalContext } });
 }
 
+/**
+ * A plugin option. hooks.json passes each one as an argument (`--proactive ${user_config.proactive}`).
+ * The copy Claude Code also exports to the environment is read by its literal name, only when the
+ * argument is missing or was not substituted.
+ */
 export function option(name, fallback) {
-  const raw = process.env[`CLAUDE_PLUGIN_OPTION_${name.toUpperCase()}`];
+  const i = process.argv.indexOf(`--${name}`);
+  let raw = i >= 0 ? process.argv[i + 1] : undefined;
+  if (raw === undefined || raw === '' || raw.includes('${')) {
+    if (name === 'proactive') raw = process.env.CLAUDE_PLUGIN_OPTION_PROACTIVE;
+    else if (name === 'min_tasks') raw = process.env.CLAUDE_PLUGIN_OPTION_MIN_TASKS;
+  }
   return raw === undefined || raw === '' ? fallback : raw;
 }
