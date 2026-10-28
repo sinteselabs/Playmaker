@@ -1,0 +1,14 @@
+{
+  "name": "sinteselabs-playmaker",
+  "description": "Playmaker: parallel multi-agent orchestration for Claude Code, by Síntese Labs.",
+  "owner": {
+    "name": "Síntese Labs"
+  },
+  "plugins": [
+    {
+      "name": "playmaker",
+      "source": "./",
+      "description": "Offers to run parallel work with the agent CLIs you already have installed, and coordinates the workers through git worktrees and Lore."
+    }
+  ]
+}

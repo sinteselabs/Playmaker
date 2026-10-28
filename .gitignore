@@ -1,0 +1,18 @@
+# Playmaker's own run state, if you dogfood it here
+.playmaker/
+
+# npm
+node_modules/
+*.tgz
+
+# Local bindings and per-machine agent configuration
+.ai-memory.toml
+.claude/
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

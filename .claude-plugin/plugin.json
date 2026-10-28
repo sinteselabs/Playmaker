@@ -1,0 +1,29 @@
+{
+  "name": "playmaker",
+  "displayName": "Playmaker",
+  "version": "0.1.0",
+  "description": "Notices when there is enough parallelizable work, offers to run it with the agent CLIs you already have installed (Claude Code, Codex, Gemini/Antigravity, Copilot), and coordinates the workers through git worktrees and Lore.",
+  "author": {
+    "name": "Síntese Labs"
+  },
+  "homepage": "https://github.com/sinteselabs/Playmaker",
+  "repository": "https://github.com/sinteselabs/Playmaker",
+  "license": "MIT",
+  "keywords": ["multi-agent", "orchestration", "parallel", "worktree", "lore"],
+  "userConfig": {
+    "proactive": {
+      "type": "boolean",
+      "title": "Proactive offers",
+      "description": "Let Playmaker nudge Claude to offer parallel execution when many tasks are open. Turn off to use only the /playmaker:orchestrate skill on demand.",
+      "default": true
+    },
+    "min_tasks": {
+      "type": "number",
+      "title": "Open tasks before nudging",
+      "description": "How many open tasks in the session task list trigger the nudge.",
+      "default": 4,
+      "min": 2,
+      "max": 20
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# Line endings: LF in the repository and in every working copy, on every system.
+# `playmaker init` copies the skills into projects byte for byte, so they must not
+# depend on the machine that cloned the repository.
+* text=auto eol=lf

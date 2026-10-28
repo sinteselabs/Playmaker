@@ -1,0 +1,63 @@
+# Every gate this repository has, on every change. `claude plugin validate .` is not
+# here: it needs Claude Code, so it stays a local gate, run before each release.
+name: checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cli:
+    name: cli on ${{ matrix.os }}, node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+
+  e2e:
+    # The fake agent CLIs in these tests are shell scripts, so they run on macOS and Linux only.
+    name: board and launcher on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: |
+          git config --global user.name "playmaker-ci"
+          git config --global user.email "ci@example.invalid"
+      - run: npm run test:e2e
+
+  package:
+    name: what the package would ship
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: the plugin, the skills and the CLI are in the package
+        run: |
+          npm pack --dry-run --json > packed.json
+          node -e '
+            const files = JSON.parse(require("fs").readFileSync("packed.json", "utf8"))[0].files.map((f) => f.path);
+            const missing = ["cli/playmaker.mjs", ".claude-plugin/plugin.json", "hooks/hooks.json", "scripts/board.mjs", "scripts/lib/launch.mjs", "skills/orchestrate/SKILL.md", "skills/run/SKILL.md", "LICENSE"].filter((p) => !files.includes(p));
+            if (missing.length) { console.error("the package would not carry: " + missing.join(", ")); process.exit(1); }
+            const tests = files.filter((p) => p.startsWith("tests/"));
+            if (tests.length) { console.error("the package would carry the tests: " + tests.join(", ")); process.exit(1); }
+            console.log(files.length + " files, with the plugin, the skills and the CLI");
+          '
