@@ -1,7 +1,7 @@
 {
   "name": "sintese-playmaker",
   "displayName": "Playmaker by Síntese Labs",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Notices when there is enough parallelizable work, offers to run it with the agent CLIs you already have installed (Claude Code, Codex, Gemini/Antigravity, Copilot), and coordinates the workers through git worktrees and Lore. Commands to plan, run, review, merge, retry, stop and check a parallel run.",
   "author": {
     "name": "Síntese Labs"

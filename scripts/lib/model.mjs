@@ -1,7 +1,7 @@
 // The board's model: defaults, collisions and the ready set. Pure functions, no Node APIs,
 // so board.mjs and the live board pane (hooks/panel.js, which runs without Node) share one copy.
 
-export const STATUSES = ['not_started', 'in_progress', 'delivered', 'rework', 'to_test', 'refix', 'done', 'postponed'];
+export const STATUSES = ['not_started', 'in_progress', 'delivered', 'in_review', 'rework', 'to_test', 'refix', 'done', 'postponed'];
 export const MERGED = new Set(['to_test', 'done']);
 
 /** Fill in the defaults a board may leave out. Changes `b` in place and returns it. */
@@ -12,6 +12,7 @@ export function withDefaults(b) {
   b.sharedFiles = b.sharedFiles || [];
   b.timeoutMin = b.timeoutMin || 30;
   b.tasks = b.tasks || [];
+  b.integration = b.integration || 'merge';
   for (const t of b.tasks) {
     t.status = t.status || 'not_started';
     t.deps = t.deps || [];
@@ -41,6 +42,8 @@ export function collides(a, b) {
 export function computeReady(b) {
   const byId = new Map(b.tasks.map((t) => [t.id, t]));
   const running = b.tasks.filter((t) => t.status === 'in_progress');
+  // A task whose pull request is open takes no worker slot, but its files are still taken.
+  const inReview = b.tasks.filter((t) => t.status === 'in_review');
   const candidates = [];
   const blocked = [];
   for (const t of b.tasks) {
@@ -65,7 +68,7 @@ export function computeReady(b) {
       continue;
     }
     let reason = null;
-    for (const r of [...running, ...batch]) {
+    for (const r of [...running, ...inReview, ...batch]) {
       reason = collides(r, c);
       if (reason) {
         reason = `${reason} with ${r.id}`;

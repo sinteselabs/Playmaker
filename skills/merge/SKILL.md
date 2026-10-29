@@ -20,7 +20,7 @@ Task: $ARGUMENTS
 3. Tell the user in a few lines what the change does and anything wrong you found.
    - If something is clearly wrong or out of scope, ask whether to send it back. On yes: `board reject <task> --note "<the specific problem>"`.
    - Otherwise integrate: the user typing this command is the approval.
-4. `board integrate <task>`. It rebases, runs the board's gates in the worktree, fast-forwards the merge, sets the task to `to_test` and cleans up. Exit 3 means it failed: the round is counted and the task goes back to `rework` (or `refix` after two rounds). Show the failing stage and the end of its output.
+4. `board integrate <task>`. It rebases, runs the board's gates in the worktree, fast-forwards the merge, sets the task to `to_test` and cleans up. On a board with `"integration": "pr"` it pushes the branch and opens a pull request instead, and the task waits `in_review` until the PR is merged on GitHub; exit 4 means the push or `gh` failed and nothing was counted. Exit 3 means it failed: the round is counted and the task goes back to `rework` (or `refix` after two rounds). Show the failing stage and the end of its output.
 5. Close with the commit, and the tasks this merge unblocked (`board ready`). If a run is active in this session, the loop continues from here; otherwise mention `/sintese-playmaker:go` to start them.
 
 Never resolve a failure by editing the code yourself: a failed integration goes back to a worker.

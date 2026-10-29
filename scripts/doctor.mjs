@@ -12,7 +12,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PROVIDER_IDS, PROVIDERS } from './lib/providers.mjs';
-import { isWin, quoteWin, readJson, repoRoot, tryGit, which } from './lib/util.mjs';
+import { readJson, repoRoot, runCommand, tryGit, which } from './lib/util.mjs';
 
 const argv = process.argv.slice(2);
 const asJson = argv.includes('--json');
@@ -26,11 +26,6 @@ const add = (status, name, detail = '') => checks.push({ status, name, detail })
 const firstLine = (s) => String(s || '').trim().split(/\r?\n/)[0];
 const tail = (s, n = 600) => (s.length > n ? `...${s.slice(-n)}` : s);
 
-/** Run a CLI the way the supervisor does: npm shims on Windows need a shell. */
-function runCli(command, args, options) {
-  if (isWin) return spawnSync([command, ...args.map(quoteWin)].join(' '), [], { ...options, shell: true, encoding: 'utf8', windowsHide: true });
-  return spawnSync(command, args, { ...options, encoding: 'utf8' });
-}
 
 // ---------------------------------------------------------------- basics
 
@@ -62,6 +57,16 @@ if (!root) {
       v.status === 0 ? `valid: ${board.tasks.length} task(s), base ${base}, ${gates.length} gate(s)` : `invalid:\n${v.stderr.trim()}`
     );
     if (v.status === 0 && !gates.length) add('warn', 'gates', 'the board has no gates, so integration merges whatever the workers deliver');
+    if (board.integration === 'pr') {
+      // Pull request mode pushes each task's branch and opens a PR with the GitHub CLI.
+      const origin = tryGit(root, 'remote', 'get-url', 'origin');
+      add(origin ? 'ok' : 'fail', 'origin', origin || 'no remote named origin: pull request mode pushes there');
+      if (!which('gh')) add('fail', 'gh', 'the GitHub CLI is not installed: pull request mode opens PRs with it');
+      else {
+        const auth = runCommand('gh', ['auth', 'status'], { cwd: root, timeout: 20000 });
+        add(auth.status === 0 ? 'ok' : 'fail', 'gh', auth.status === 0 ? 'GitHub CLI logged in' : 'GitHub CLI not logged in: run gh auth login');
+      }
+    }
   }
 }
 
@@ -76,7 +81,7 @@ for (const id of PROVIDER_IDS) {
     continue;
   }
   installed.push(id);
-  const v = runCli(p.bin, ['--version'], { timeout: 20000 });
+  const v = runCommand(p.bin, ['--version'], { timeout: 20000 });
   const version = firstLine(v.stdout) || firstLine(v.stderr);
   add(v.status === 0 ? 'ok' : 'warn', id, `${p.label} ${v.status === 0 ? version : `found but "--version" failed: ${version || v.error?.message || 'no output'}`}  (${where})`);
 }
@@ -131,7 +136,7 @@ try {
     const cwd = scratchDir();
     const resultPath = path.join(scratch, `smoke-${id}.md`);
     const args = p.build({ prompt: SMOKE_PROMPT, model: '', allow: [], extra: [], resultPath });
-    const res = runCli(p.bin, args, { cwd, timeout: 3 * 60 * 1000 });
+    const res = runCommand(p.bin, args, { cwd, timeout: 3 * 60 * 1000 });
     let said = `${res.stdout || ''}${res.stderr || ''}`;
     if (fs.existsSync(resultPath)) said += fs.readFileSync(resultPath, 'utf8');
     const ok = res.status === 0 && said.includes('PLAYMAKER-OK');
