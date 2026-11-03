@@ -44,7 +44,7 @@ export function which(bin, env = process.env) {
 }
 
 export function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
 }
 
 export function tryGit(cwd, ...args) {
@@ -119,9 +119,9 @@ export function hookOutput(eventName, additionalContext) {
 }
 
 /**
- * A plugin option. hooks.json passes each one as an argument (`--proactive ${user_config.proactive}`).
- * The copy Claude Code also exports to the environment is read by its literal name, only when the
- * argument is missing or was not substituted.
+ * A plugin option: an argument when one is given, then what Claude Code exports to the environment,
+ * then the fallback. hooks.json must not pass `${user_config.*}`: an option the user never saved
+ * has no value to substitute, even with a default, and Claude Code then refuses to run the hook.
  */
 export function option(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);

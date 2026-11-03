@@ -13,9 +13,7 @@
             "command": "node",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/scripts/detect-agents.mjs",
-              "--hook",
-              "--proactive",
-              "${user_config.proactive}"
+              "--hook"
             ],
             "timeout": 10
           }
@@ -30,11 +28,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/task-watch.mjs",
-              "--proactive",
-              "${user_config.proactive}",
-              "--min_tasks",
-              "${user_config.min_tasks}"
+              "${CLAUDE_PLUGIN_ROOT}/scripts/task-watch.mjs"
             ],
             "timeout": 10
           }

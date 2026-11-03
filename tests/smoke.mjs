@@ -101,7 +101,11 @@ const off = spawnSync(process.execPath, [script('task-watch.mjs')], {
 });
 assert.equal(off.stdout, '', 'proactive=false silences the hook');
 
-// options as hooks.json passes them: arguments first, an unsubstituted placeholder means the default
+// With no saved value Claude Code refuses a hook that references ${user_config.*}, default or not,
+// so the hooks read the environment. A placeholder here would fail every session of a fresh install.
+assert.doesNotMatch(fs.readFileSync(path.join(path.dirname(script('task-watch.mjs')), '..', 'hooks', 'hooks.json'), 'utf8'), /user_config/);
+
+// arguments win, and an unsubstituted placeholder means the default
 r = hook('task-watch.mjs', ['--proactive', 'false'], { ...todos(9), session_id: 'sess-3' });
 assert.equal(r.stdout, '', '--proactive false silences the hook');
 r = hook('task-watch.mjs', ['--min_tasks', '2'], { ...todos(2), session_id: 'sess-4' });
