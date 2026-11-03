@@ -47,10 +47,11 @@ export const PROVIDERS = {
     label: 'Antigravity CLI',
     bin: 'agy',
     // Shell tools stay denied in headless runs unless the user's settings.json pre-approves them.
-    build: ({ prompt, extra }) => [
+    build: ({ prompt, model, extra }) => [
       '-p', prompt,
       '--mode', 'accept-edits',
       '--output-format', 'text',
+      ...(model ? ['--model', model] : []),
       ...extra,
     ],
   },

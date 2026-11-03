@@ -15,8 +15,9 @@ const DOCTOR = path.join(ROOT, 'scripts', 'doctor.mjs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'playmaker-commands-'));
-const repo = path.join(tmp, 'proj');
-fs.mkdirSync(repo);
+// A space and an accent, as in a real project folder: cwd, worktrees and git must all carry them.
+const repo = path.join(tmp, 'Síntese Labs', 'proj');
+fs.mkdirSync(repo, { recursive: true });
 const env = installFakes(path.join(tmp, 'bin'), ['claude', 'codex'], { CLAUDE_PLUGIN_DATA: path.join(tmp, 'data') });
 
 const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
@@ -37,9 +38,27 @@ assert.equal(r.status, 0, r.stderr);
 assert.match(r.stdout, /No Playmaker board/);
 r = spawnSync(process.execPath, [BOARD, 'report'], { cwd: tmp, env, encoding: 'utf8' });
 assert.equal(r.status, 0, 'outside a repository too');
-r = spawnSync(process.execPath, [BOARD, 'watch'], { cwd: tmp, env, encoding: 'utf8', timeout: 10000 });
-assert.equal(r.status, 0, 'the monitor exits quietly outside a repository');
-assert.equal(r.stdout, '');
+
+// The monitor outlives a folder with no repository, silently: Claude Code reports a monitor that
+// ends as a background event, which wakes the agent, and nobody would watch a later `git init`.
+const late = path.join(tmp, 'late');
+fs.mkdirSync(late);
+const lateLines = [];
+const lateWatch = spawn(process.execPath, [BOARD, 'watch'], { cwd: late, env });
+let lateExit = null;
+lateWatch.on('exit', (code) => (lateExit = code ?? 'signal'));
+lateWatch.stdout.on('data', (chunk) => lateLines.push(...chunk.toString().split('\n').filter(Boolean)));
+await sleep(6000);
+assert.equal(lateExit, null, 'the monitor keeps running outside a repository');
+assert.deepEqual(lateLines, [], 'and says nothing');
+const lg = (...a) => execFileSync('git', a, { cwd: late, encoding: 'utf8' });
+lg('init', '-q', '-b', 'main');
+fs.mkdirSync(path.join(late, '.playmaker', 'runs', 'r1', 'a'), { recursive: true });
+fs.writeFileSync(path.join(late, '.playmaker', 'board.json'), JSON.stringify({ base: 'main', run: 'r1', tasks: [{ id: 'a', worker: 'a', status: 'delivered', provider: 'claude' }] }));
+fs.writeFileSync(path.join(late, '.playmaker', 'runs', 'r1', 'a', 'status.json'), JSON.stringify({ state: 'done', filesChanged: 1 }));
+for (let i = 0; i < 40 && !lateLines.length; i += 1) await sleep(500);
+assert.ok(lateLines.some((l) => /task a was delivered earlier/.test(l)), `a repository that appears is watched: ${JSON.stringify(lateLines)}`);
+lateWatch.kill();
 
 const board = {
   base: 'main',

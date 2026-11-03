@@ -1,6 +1,6 @@
 ---
 name: go
-description: Use when the user says "parallel run" or "autonomous parallel run", asks to start or resume a Playmaker run, or after sintese-playmaker:plan got the user's approval and the board is written. Acts as the manager: starts workers for every task that can safely run, integrates each delivery as it arrives (rebase, gates, merge), starts the next ones, and reports to the user when everything is finished.
+description: "Use when the user says \"parallel run\" or \"autonomous parallel run\", asks to start or resume a Playmaker run, or after sintese-playmaker:plan got the user's approval and the board is written. Acts as the manager: starts workers for every task that can safely run, integrates each delivery as it arrives (rebase, gates, merge), starts the next ones, and reports to the user when everything is finished."
 ---
 
 # Playmaker: run the board

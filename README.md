@@ -304,7 +304,8 @@ board and no integration (at most 6 workers).
   stop.
 - **The monitor and the live board only read.** Neither changes the board, so
   neither can race a merge. The board's buttons run the same commands you can
-  type. Outside a git repository the monitor exits at once.
+  type. Outside a git repository the monitor waits quietly, and starts watching
+  if one appears during the session.
 - **Nothing is pushed** to a remote unless you ask.
 
 The command line of each CLI and its caveats are in
