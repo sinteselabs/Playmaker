@@ -55,15 +55,30 @@ function die(message, code = 1) {
   process.exit(code);
 }
 
-const root = repoRoot();
+/** True when this folder or one above it holds a `.git`. Costs no process, so it can be polled. */
+function gitAbove(dir) {
+  for (;;) {
+    if (fs.existsSync(path.join(dir, '.git'))) return true;
+    const up = path.dirname(dir);
+    if (up === dir) return false;
+    dir = up;
+  }
+}
+
+let root = repoRoot();
 if (!root) {
-  // The monitor starts in every session, git repository or not: it has nothing to watch here.
-  if (cmd === 'watch') process.exit(0);
   if (cmd === 'report') {
     console.log('Not inside a git repository, so there is no Playmaker board here.');
     process.exit(0);
   }
-  die('run this from the main worktree of a git repository.');
+  if (cmd !== 'watch') die('run this from the main worktree of a git repository.');
+  // The monitor starts in every session, git repository or not, and it must not exit: Claude Code
+  // reports a monitor that ends as a background event, which wakes the agent for nothing, and a
+  // `git init` later in the session would find nobody watching. So it waits for a repository.
+  while (!root) {
+    await new Promise((r) => setTimeout(r, 5000));
+    if (gitAbove(process.cwd())) root = repoRoot();
+  }
 }
 const boardFile = path.join(root, '.playmaker', 'board.json');
 // Outlives every run: one entry per task that merged or was parked, for the provider scorecard.
