@@ -23,6 +23,23 @@ assert.equal(cli([], tmp).status, 2, 'no command is a usage error');
 assert.equal(cli(['nope'], tmp).status, 2, 'unknown command is a usage error');
 assert.equal(cli(['init', '--agent', 'nope'], tmp).status, 2, 'unknown agent is a usage error');
 
+// every skill's frontmatter is YAML a strict parser takes ---------------------
+// Claude Code forgives a bare "word: word" in a description; the other agents' skill loaders do not.
+for (const skill of fs.readdirSync(path.join(ROOT, 'skills'))) {
+  const text = fs.readFileSync(path.join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
+  for (const line of text.split(/\r?\n---/)[0].split(/\r?\n/).slice(1)) {
+    const value = line.slice(line.indexOf(':') + 1).trim();
+    if (/^["'[{]/.test(value)) continue;
+    assert.doesNotMatch(value, /: | #/, `skills/${skill}/SKILL.md: quote this value: ${line.slice(0, 60)}`);
+  }
+}
+
+// agy takes a model, like the others -----------------------------------------
+const { PROVIDERS } = await import('../scripts/lib/providers.mjs');
+const agyArgs = (model) => PROVIDERS.agy.build({ prompt: 'p', model, allow: [], extra: [] });
+assert.deepEqual(agyArgs('m1').slice(-2), ['--model', 'm1']);
+assert.ok(!agyArgs('').includes('--model'), 'no model, no flag');
+
 // init --dry-run writes nothing --------------------------------------------
 const dry = cli(['init', '--dry-run'], tmp);
 assert.equal(dry.status, 0, dry.stderr);
