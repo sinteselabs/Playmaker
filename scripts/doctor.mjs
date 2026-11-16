@@ -62,10 +62,7 @@ if (!root) {
       const origin = tryGit(root, 'remote', 'get-url', 'origin');
       add(origin ? 'ok' : 'fail', 'origin', origin || 'no remote named origin: pull request mode pushes there');
       if (!which('gh')) add('fail', 'gh', 'the GitHub CLI is not installed: pull request mode opens PRs with it');
-      else {
-        const auth = runCommand('gh', ['auth', 'status'], { cwd: root, timeout: 20000 });
-        add(auth.status === 0 ? 'ok' : 'fail', 'gh', auth.status === 0 ? 'GitHub CLI logged in' : 'GitHub CLI not logged in: run gh auth login');
-      }
+      else add('ok', 'gh', 'GitHub CLI installed. Playmaker never reads its login: if opening a pull request fails, run gh auth status yourself');
     }
   }
 }

@@ -3,15 +3,13 @@
 //   --hook   SessionStart hook: reads stdin, prints hook JSON (only when there is something useful to say)
 //   --print  prints the detection result as JSON
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { PROVIDERS } from './lib/providers.mjs';
 import { dataDir, hookOutput, option, pidAlive, readJson, readStdinJson, repoRoot, which, writeJsonAtomic } from './lib/util.mjs';
 
+// Reads the environment variable only. It never opens files in the user's home folder.
 function agentTeamsEnabled() {
-  if (process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1') return true;
-  const settings = readJson(path.join(os.homedir(), '.claude', 'settings.json'), {});
-  return settings?.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
+  return process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
 }
 
 function runningWorkers(root) {

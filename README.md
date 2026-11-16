@@ -368,6 +368,37 @@ Lore. The details are in
   Without them, everything else works and `/sintese-playmaker:board` shows the
   same state in the conversation.
 
+## What the plugin runs on your machine
+
+Nothing here reads a credential, and Playmaker has no setting that asks for one.
+
+- **Hooks** (`hooks/hooks.json`). `SessionStart` runs `scripts/detect-agents.mjs`,
+  which looks for the agent CLIs on your `PATH` (`claude`, `codex`, `gemini`,
+  `agy`, `copilot`) and reads the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+  environment variable. It opens no file in your home folder. `PostToolUse`
+  runs `scripts/task-watch.mjs` after `TaskCreate`, `TaskUpdate` and
+  `TodoWrite` and counts the open tasks in the session, to decide whether to
+  nudge. Neither hook changes a call or its result.
+- **Monitor** (`monitors/monitors.json`). `scripts/board.mjs watch` runs in the
+  background, reads `.playmaker/` in the repository and prints one line per
+  delivery or failure. It never writes.
+- **The live board mod** (`hooks/panel.js`). It reads `.playmaker/` and draws a
+  pane and one line above the prompt. It registers one command, `/playmaker`,
+  and handles only that one: its `command.run` hook answers `/playmaker` and
+  passes every other command through untouched. The buttons in the pane run
+  Playmaker's own commands, as if you had typed them, and only those:
+  `/sintese-playmaker:plan` (Plan), `:go` (Go), `:stop` (Stop), `:board`
+  (Report), `:merge` (Merge or Open PR), `:retry` (Retry) and `:done` (Done).
+  Each runs when you press its button, never by itself.
+- **GitHub.** Only in pull request mode, and only when you approved it for the
+  run, the manager calls `gh` to push a task's branch and open a pull request.
+  `gh` uses the login you already have; Playmaker does not read, copy or store
+  it. `/sintese-playmaker:doctor` checks that `gh` is installed, not that it is
+  logged in.
+- **The icon** (`.claude-plugin/icon.png`) is a static 1024 px PNG for the
+  plugin listing. No script opens it. `tooling/make_icon.py` redraws it and is
+  not part of the package.
+
 ## Tests
 
 ```bash
